@@ -2,6 +2,8 @@
   "name": "repotxt",
   "displayName": "Repository Content Analyzer",
   "description": "Analyze and generate reports of repository content",
+  "repository": "https://github.com/Vasysik/repotxt",
+  
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.96.0"
