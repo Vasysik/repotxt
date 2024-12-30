@@ -1,0 +1,104 @@
+{
+  "name": "repotxt",
+  "displayName": "Repository Content Analyzer",
+  "description": "Analyze and generate reports of repository content",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "repo-analyzer",
+          "title": "Repo Analyzer",
+          "icon": "$(output-view-icon)"
+        }
+      ]
+    },
+    "views": {
+      "repo-analyzer": [
+        {
+          "id": "repotxt",
+          "name": "Repository Files",
+          "icon": "$(output-view-icon)",
+          "contextualTitle": "Repository Files"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "repotxt.toggleExclude",
+        "title": "Toggle Exclude",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "repotxt.generateReport",
+        "title": "Generate Report",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "repotxt.toggleAIStyle",
+        "title": "Toggle AI Analysis Style",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "repotxt.refresh",
+        "title": "Refresh File Tree",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "repotxt.toggleExclude",
+          "when": "view == repotxt",
+          "group": "inline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "repotxt.refresh",
+          "when": "view == repotxt",
+          "group": "navigation@1"
+        },
+        {
+          "command": "repotxt.generateReport",
+          "when": "view == repotxt",
+          "group": "navigation@2"
+        },
+        {
+          "command": "repotxt.toggleAIStyle",
+          "when": "view == repotxt",
+          "group": "navigation@3"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.96.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
