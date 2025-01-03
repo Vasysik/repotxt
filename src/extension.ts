@@ -1,11 +1,18 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 
 interface FileTreeItem extends vscode.TreeItem {
     children?: FileTreeItem[];
     fullPath: string;
     excluded: boolean;
+}
+
+interface ExclusionSettings {
+    autoExcludePatterns: string[];
+    respectGitignore: boolean;
+    autoExcludeEnabled: boolean;
 }
 
 class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
@@ -16,11 +23,13 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     private workspaceRoot: string | undefined;
     private _useAIStyle: boolean = false;
     private fileWatcher: vscode.FileSystemWatcher | undefined;
+    private gitignorePatterns: string[] = [];
 
     constructor(context: vscode.ExtensionContext) {
         if (vscode.workspace.workspaceFolders) {
             this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
             this.setupFileWatcher();
+            this.initializeExclusions().then(() => { this.refresh(); });
         }
         
         this._useAIStyle = context.globalState.get('repotxt.useAIStyle', false);
@@ -29,13 +38,139 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
             if (vscode.workspace.workspaceFolders) {
                 this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
                 this.setupFileWatcher();
-                this.refresh();
+                this.initializeExclusions().then(() => { this.refresh(); });
+            }
+        });
+
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('repotxt')) {
+                this.initializeExclusions().then(() => { this.refresh(); });
             }
         });
     }
 
+    private async checkForAutoExclusion(filePath: string) {
+        const config = vscode.workspace.getConfiguration('repotxt');
+        const autoExcludeEnabled = config.get('autoExcludeEnabled', true);
+        
+        if (!autoExcludeEnabled) {
+            return;
+        }
+
+        const patterns = config.get<string[]>('autoExcludePatterns', []);
+        const fileName = path.basename(filePath);
+        const relativePath = path.relative(this.workspaceRoot!, filePath);
+
+        const shouldExclude = patterns.some(pattern => {
+            if (pattern === fileName || pattern === relativePath) {
+                return true;
+            }
+            
+            if (pattern.includes('*')) {
+                const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+                return regex.test(fileName) || regex.test(relativePath);
+            }
+            
+            return false;
+        });
+
+        if (shouldExclude) {
+            this.excludedPaths.add(filePath);
+            if (fs.statSync(filePath).isDirectory()) {
+                this.excludeDirectory(filePath);
+            }
+        }
+    }
+
+    private async initializeExclusions() {
+        if (!this.workspaceRoot) return;
+
+        const config = vscode.workspace.getConfiguration('repotxt');
+        const settings: ExclusionSettings = {
+            autoExcludeEnabled: config.get('autoExcludeEnabled', true),
+            autoExcludePatterns: config.get('autoExcludePatterns', [
+                'node_modules',
+                '.git',
+                'dist',
+                'build',
+                'out',
+                'coverage',
+                '.env',
+                '*.log',
+                'package-lock.json',
+                'yarn.lock'
+            ]),
+            respectGitignore: config.get('respectGitignore', true)
+        };
+
+        this.excludedPaths.clear();
+
+        if (!settings.autoExcludeEnabled) {
+            return;
+        }
+
+        if (settings.autoExcludePatterns.length > 0) {
+            await this.processExcludePatterns(settings.autoExcludePatterns);
+        }
+
+        if (settings.respectGitignore) {
+            await this.processGitignore();
+        }
+    }
+
+    private async processGitignore() {
+        if (!this.workspaceRoot) return;
+
+        const gitignorePath = path.join(this.workspaceRoot, '.gitignore');
+        if (!fs.existsSync(gitignorePath)) return;
+
+        try {
+            const fileStream = fs.createReadStream(gitignorePath);
+            const rl = readline.createInterface({
+                input: fileStream,
+                crlfDelay: Infinity
+            });
+
+            this.gitignorePatterns = [];
+            for await (const line of rl) {
+                if (line && !line.startsWith('#') && line.trim()) {
+                    this.gitignorePatterns.push(line.trim());
+                }
+            }
+
+            await this.processExcludePatterns(this.gitignorePatterns);
+        } catch (error) {
+            console.error('Error processing .gitignore:', error);
+        }
+    }
+
+    private async processExcludePatterns(patterns: string[]) {
+        if (!this.workspaceRoot) return;
+
+        for (const pattern of patterns) {
+            const fullPattern = path.join(this.workspaceRoot, pattern);
+            
+            try {
+                // Handle glob patterns
+                const matches = await vscode.workspace.findFiles(pattern);
+                matches.forEach(uri => {
+                    this.excludedPaths.add(uri.fsPath);
+                });
+                
+                // Handle direct paths
+                if (fs.existsSync(fullPattern)) {
+                    this.excludedPaths.add(fullPattern);
+                    if (fs.statSync(fullPattern).isDirectory()) {
+                        this.excludeDirectory(fullPattern);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error processing pattern ${pattern}:`, error);
+            }
+        }
+    }
+
 	private setupFileWatcher() {
-        // Очищаем предыдущий watcher если он был
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
         }
@@ -45,19 +180,20 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
                 new vscode.RelativePattern(this.workspaceRoot, '**/*')
             );
 
-            this.fileWatcher.onDidCreate(() => this.refresh());
+            this.fileWatcher.onDidCreate(async (uri) => {
+                await this.checkForAutoExclusion(uri.fsPath);
+                this.refresh();
+            });
             this.fileWatcher.onDidDelete(() => this.refresh());
             this.fileWatcher.onDidChange(() => this.refresh());
         }
     }
 
 	private isPathExcluded(fullPath: string): boolean {
-        // Проверяем сам путь
         if (this.excludedPaths.has(fullPath)) {
             return true;
         }
 
-        // Проверяем, находится ли путь в исключенной папке
         for (const excludedPath of this.excludedPaths) {
             if (fullPath.startsWith(excludedPath + path.sep)) {
                 return true;
@@ -93,7 +229,6 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         }
     }
 
-    // Добавляем геттер для useAIStyle
     get useAIStyle(): boolean {
         return this._useAIStyle;
     }
@@ -115,7 +250,6 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
             treeItem.iconPath = new vscode.ThemeIcon('eye-closed');
             treeItem.description = '(excluded)';
             treeItem.tooltip = 'Excluded from report';
-            treeItem.resourceUri = vscode.Uri.parse(`excluded:${element.fullPath}`);
         } else {
             treeItem.iconPath = element.collapsibleState === vscode.TreeItemCollapsibleState.None ?
                 new vscode.ThemeIcon('file') :
@@ -307,12 +441,17 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
 
-    // Create status bar item for AI Style toggle
     aiStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
     aiStatusBarItem.command = 'repotxt.toggleAIStyle';
+    context.subscriptions.push(aiStatusBarItem);
+
+    function updateAIStatusBarItem(useAIStyle: boolean) {
+        aiStatusBarItem.text = useAIStyle ? '$(sparkle) AI Style' : '$(symbol-boolean) Regular Style';
+        aiStatusBarItem.tooltip = useAIStyle ? 'Click to disable AI Style' : 'Click to enable AI Style';
+    }
+
     updateAIStatusBarItem(repoAnalyzerProvider.useAIStyle);
     aiStatusBarItem.show();
-    context.subscriptions.push(aiStatusBarItem);
 
     context.subscriptions.push(
         vscode.commands.registerCommand('repotxt.refresh', () => {
@@ -351,13 +490,4 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-function updateAIStatusBarItem(useAIStyle: boolean) {
-    aiStatusBarItem.text = useAIStyle ? '$(sparkle) AI Style' : '$(symbol-boolean) Regular Style';
-    aiStatusBarItem.tooltip = useAIStyle ? 'Click to disable AI Style' : 'Click to enable AI Style';
-}
-
-export function deactivate() {
-    if (aiStatusBarItem) {
-        aiStatusBarItem.dispose();
-    }
-}
+export function deactivate() {}

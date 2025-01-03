@@ -43,6 +43,41 @@ Generate comprehensive reports that include:
 - **Toggle AI Style** (zap/settings icon): Switch between analysis modes
 - **Refresh** (refresh icon): Update the file tree view
 
+## Settings
+
+The extension can be configured through VS Code settings:
+
+### Auto-Exclude Settings
+- `repotxt.autoExcludeEnabled`: Enable/disable automatic file exclusion
+  - Default: `true`
+  - When enabled, automatically excludes common development files and folders
+
+- `repotxt.autoExcludePatterns`: Patterns of files and folders to automatically exclude
+  - Default patterns:
+    ```
+    node_modules
+    .git
+    dist
+    build
+    out
+    coverage
+    .env
+    *.log
+    package-lock.json
+    yarn.lock
+    ```
+  - Supports glob patterns like `*.log`
+
+### Git Integration
+- `repotxt.respectGitignore`: Automatically exclude files listed in .gitignore
+  - Default: `true`
+  - When enabled, reads and respects your repository's .gitignore file
+
+You can modify these settings in VS Code:
+1. Open Settings (Ctrl/Cmd + ,)
+2. Search for "Repository Analyzer"
+3. Adjust settings as needed
+
 ## Requirements
 
 - Visual Studio Code version 1.96.0 or higher

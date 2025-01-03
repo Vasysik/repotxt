@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -82,6 +82,40 @@
           "group": "navigation@3"
         }
       ]
+    },
+    "configuration": {
+      "title": "Repository Analyzer",
+      "properties": {
+        "repotxt.autoExcludeEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable automatic file exclusion"
+        },
+        "repotxt.autoExcludePatterns": {
+          "type": "array",
+          "default": [
+            "node_modules",
+            ".git",
+            "dist",
+            "build",
+            "out",
+            "coverage",
+            ".env",
+            "*.log",
+            "package-lock.json",
+            "yarn.lock"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Patterns to automatically exclude from the repository analysis"
+        },
+        "repotxt.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically exclude files and folders listed in .gitignore"
+        }
+      }
     }
   },
   "scripts": {
