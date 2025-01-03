@@ -3,10 +3,10 @@
   "displayName": "Repository Content Analyzer",
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
-  
-  "version": "0.0.2",
+  "publisher": "TUBIK-corp",
+  "version": "0.0.3",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
@@ -47,11 +47,6 @@
         "icon": "$(notebook)"
       },
       {
-        "command": "repotxt.toggleAIStyle",
-        "title": "Toggle AI Analysis Style",
-        "icon": "$(sparkle)"
-      },
-      {
         "command": "repotxt.refresh",
         "title": "Refresh File Tree",
         "icon": "$(refresh)"
@@ -75,11 +70,6 @@
           "command": "repotxt.generateReport",
           "when": "view == repotxt",
           "group": "navigation@2"
-        },
-        {
-          "command": "repotxt.toggleAIStyle",
-          "when": "view == repotxt",
-          "group": "navigation@3"
         }
       ]
     },
@@ -114,6 +104,16 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically exclude files and folders listed in .gitignore"
+        },
+        "repotxt.aiStyle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI-style analysis"
+        },
+        "repotxt.aiPrompt": {
+          "type": "string",
+          "default": "Prompt: Analyze the ${workspaceName} folder to understand its structure, purpose, and functionality.\nFollow these steps to study the codebase:\n\n1. Read the README file to gain an overview of the project, its goals, and any setup instructions.\n\n2. Examine the folder structure to understand how the files and directories are organized.\n\n3. Identify the main entry point of the application and start analyzing the code flow from there.\n\n4. Study the dependencies and libraries used in the project.\n\n5. Analyze the core functionality of the project.\n\n6. Look for any configuration files to understand project settings.\n\n7. Investigate any tests or test directories.\n\n8. Review documentation and inline comments.\n\n9. Identify potential areas for improvement.\n\n10. Provide a summary of findings.",
+          "description": "Custom prompt for AI-style analysis. Use ${workspaceName} to insert the workspace folder name."
         }
       }
     }

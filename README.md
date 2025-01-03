@@ -4,22 +4,22 @@ A VS Code extension that helps you analyze and generate comprehensive reports of
 
 ## Features
 
-- **Interactive File Tree**: Browse your repository structure with an interactive tree view
+- **Interactive File Tree**: Browse your repository structure with an interactive tree view, click to open files
 - **Selective Analysis**: Include or exclude specific files and folders from analysis
-- **AI-Enhanced Analysis**: Toggle between regular and AI-enhanced analysis modes
+- **AI-Enhanced Analysis**: Generate AI-powered analysis reports
 - **Report Generation**: Generate detailed reports of your repository content
 - **Real-Time Updates**: Automatically updates when files change in your workspace
 
 ### File Tree and Exclusion
 The extension provides a tree view of your repository where you can:
 - View all files and folders in your workspace
+- Click files to open them in the editor
 - Toggle files/folders to include/exclude from analysis
 - See excluded items marked with a closed eye icon
 
-### Analysis Modes
-Choose between two analysis modes:
-- **Regular Mode**: Basic file structure and content analysis
-- **AI Style**: Enhanced analysis with intelligent structure interpretation and recommendations
+### Analysis Types
+- **Regular Analysis**: Basic file structure and content analysis
+- **AI Analysis**: Enhanced analysis with intelligent structure interpretation and recommendations (configurable via settings)
 
 ### Report Generation
 Generate comprehensive reports that include:
@@ -40,12 +40,20 @@ Generate comprehensive reports that include:
 
 - **Toggle Exclude** (eye icon): Include/exclude files from analysis
 - **Generate Report** (notebook icon): Create a new analysis report
-- **Toggle AI Style** (zap/settings icon): Switch between analysis modes
 - **Refresh** (refresh icon): Update the file tree view
 
 ## Settings
 
 The extension can be configured through VS Code settings:
+
+### Analysis Settings
+- `repotxt.aiStyle`: Enable/disable AI-enhanced analysis
+  - Default: `false`
+  - When enabled, generates reports with AI-powered analysis
+
+- `repotxt.aiPrompt`: Customize the AI analysis prompt
+  - Default: Full analysis prompt text
+  - Modify to change how AI analyzes your repository
 
 ### Auto-Exclude Settings
 - `repotxt.autoExcludeEnabled`: Enable/disable automatic file exclusion

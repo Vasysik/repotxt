@@ -32,8 +32,6 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
             this.initializeExclusions().then(() => { this.refresh(); });
         }
         
-        this._useAIStyle = context.globalState.get('repotxt.useAIStyle', false);
-        
         vscode.workspace.onDidChangeWorkspaceFolders(() => {
             if (vscode.workspace.workspaceFolders) {
                 this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -255,6 +253,14 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
                 new vscode.ThemeIcon('file') :
                 new vscode.ThemeIcon('folder');
         }
+
+        if (element.collapsibleState === vscode.TreeItemCollapsibleState.None) {
+            treeItem.command = {
+                command: 'vscode.open',
+                arguments: [vscode.Uri.file(element.fullPath)],
+                title: 'Open File'
+            };
+        }
                 
         return treeItem;
     }
@@ -370,43 +376,24 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         if (!this.workspaceRoot) {
             return 'No workspace folder opened';
         }
-
-		let report = '';
-
-        if (this._useAIStyle) {
-            report += `Prompt: Analyze the ${path.basename(this.workspaceRoot)} folder to understand its structure, purpose, and functionality.
-Follow these steps to study the codebase:
-
-1. Read the README file to gain an overview of the project, its goals, and any setup instructions.
-
-2. Examine the folder structure to understand how the files and directories are organized.
-
-3. Identify the main entry point of the application and start analyzing the code flow from there.
-
-4. Study the dependencies and libraries used in the project.
-
-5. Analyze the core functionality of the project.
-
-6. Look for any configuration files to understand project settings.
-
-7. Investigate any tests or test directories.
-
-8. Review documentation and inline comments.
-
-9. Identify potential areas for improvement.
-
-10. Provide a summary of findings.
-
-`;
+    
+        let report = '';
+        const config = vscode.workspace.getConfiguration('repotxt');
+        const useAiStyle = config.get('aiStyle', false);
+        
+        if (useAiStyle) {
+            const aiPrompt = config.get('aiPrompt', '');
+            const workspaceName = path.basename(this.workspaceRoot);
+            report += aiPrompt.replace('${workspaceName}', workspaceName) + '\n\n';
         }
-
+    
         report += `Folder Structure: ${path.basename(this.workspaceRoot)}\n`;
         report += await this.generateFolderStructure(this.workspaceRoot);
         report += '\n';
-
+    
         const files = await this.analyzeFiles(this.workspaceRoot);
         report += files.join('\n');
-
+    
         return report;
     }
 
@@ -441,18 +428,6 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
 
-    aiStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
-    aiStatusBarItem.command = 'repotxt.toggleAIStyle';
-    context.subscriptions.push(aiStatusBarItem);
-
-    function updateAIStatusBarItem(useAIStyle: boolean) {
-        aiStatusBarItem.text = useAIStyle ? '$(sparkle) AI Style' : '$(symbol-boolean) Regular Style';
-        aiStatusBarItem.tooltip = useAIStyle ? 'Click to disable AI Style' : 'Click to enable AI Style';
-    }
-
-    updateAIStatusBarItem(repoAnalyzerProvider.useAIStyle);
-    aiStatusBarItem.show();
-
     context.subscriptions.push(
         vscode.commands.registerCommand('repotxt.refresh', () => {
             repoAnalyzerProvider.refresh();
@@ -464,14 +439,6 @@ export function activate(context: vscode.ExtensionContext) {
             repoAnalyzerProvider.toggleExclude(item);
         })
     );
-    
-    let aiCommand = vscode.commands.registerCommand('repotxt.toggleAIStyle', () => {
-        repoAnalyzerProvider.toggleAIStyle();
-        context.globalState.update('repotxt.useAIStyle', repoAnalyzerProvider.useAIStyle);
-        updateAIStatusBarItem(repoAnalyzerProvider.useAIStyle);
-    });
-    
-    context.subscriptions.push(aiCommand);
 
     context.subscriptions.push(
         vscode.commands.registerCommand('repotxt.generateReport', async () => {
