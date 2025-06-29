@@ -43,6 +43,7 @@ Generate comprehensive reports that include:
 - **Toggle Exclude** (eye icon): Include/exclude files from analysis. Your choice is saved for the project.
 - **Generate Report** (notebook icon): Create a new analysis report
 - **Refresh** (refresh icon): Update the file tree view
+- **Reset Exclusions** (clear-all icon): Reverts all manual inclusions/exclusions to the defaults defined in your settings.
 
 ## Settings
 

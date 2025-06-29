@@ -9,40 +9,31 @@ interface FileTreeItem extends vscode.TreeItem {
     excluded: boolean;
 }
 
-interface ExclusionSettings {
-    autoExcludePatterns: string[];
-    respectIgnoreFiles: boolean;
-    ignoreFileNames: string[];
-    autoExcludeEnabled: boolean;
-    excludeBinaryFiles: boolean;
-    binaryFileExtensions: string[];
+interface SessionState {
+    includes: string[];
+    excludes: string[];
 }
 
 class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FileTreeItem | undefined | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-    private excludedPaths: Set<string> = new Set();
     private workspaceRoot: string | undefined;
     private fileWatcher: vscode.FileSystemWatcher | undefined;
-    private readonly exclusionStateKey = 'repotxt.excludedPaths';
+    
+    private autoExcludes: Set<string> = new Set();
+    private manualIncludes: Set<string> = new Set();
+    private manualExcludes: Set<string> = new Set();
+
+    private readonly sessionStateKey = 'repotxt.sessionState';
 
     constructor(private context: vscode.ExtensionContext) {
-        this.updateWorkspaceRoot().then(() => {
-            this.refresh();
-        });
+        this.updateWorkspaceRoot();
         
-        vscode.workspace.onDidChangeWorkspaceFolders(() => {
-            this.updateWorkspaceRoot().then(() => {
-                this.refresh();
-            });
-        });
-
+        vscode.workspace.onDidChangeWorkspaceFolders(() => this.updateWorkspaceRoot());
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('repotxt')) {
-                this.initializeExclusions().then(() => { 
-                    this.refresh();
-                });
+                this.recalculateAutoExclusions().then(() => this.refresh());
             }
         });
     }
@@ -50,8 +41,10 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     private async updateWorkspaceRoot() {
         if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
             this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            this.loadState();
+            await this.recalculateAutoExclusions();
             this.setupFileWatcher();
-            await this.initializeExclusions();
+            this.refresh();
         } else {
             this.workspaceRoot = undefined;
             this.fileWatcher?.dispose();
@@ -60,205 +53,151 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
 
     private saveState(): void {
         if (this.workspaceRoot) {
-            const excludedPathsArray = Array.from(this.excludedPaths);
-            this.context.workspaceState.update(this.exclusionStateKey, excludedPathsArray);
+            const state: SessionState = {
+                includes: Array.from(this.manualIncludes),
+                excludes: Array.from(this.manualExcludes),
+            };
+            this.context.workspaceState.update(this.sessionStateKey, state);
         }
     }
 
     private loadState(): void {
         if (this.workspaceRoot) {
-            const excludedPathsArray = this.context.workspaceState.get<string[]>(this.exclusionStateKey, []);
-            this.excludedPaths = new Set(excludedPathsArray);
+            const state = this.context.workspaceState.get<SessionState>(this.sessionStateKey);
+            this.manualIncludes = new Set(state?.includes || []);
+            this.manualExcludes = new Set(state?.excludes || []);
         }
     }
 
-    private async checkForAutoExclusion(filePath: string) {
-        // This function is now mainly for on-the-fly creation, 
-        // the main logic is in initializeExclusions
-        const config = vscode.workspace.getConfiguration('repotxt');
-        const autoExcludeEnabled = config.get('autoExcludeEnabled', true);
-        if (!autoExcludeEnabled) return;
-
-        const patterns = config.get<string[]>('autoExcludePatterns', []);
-        const fileName = path.basename(filePath);
-        const relativePath = this.workspaceRoot ? path.relative(this.workspaceRoot, filePath) : '';
-
-        const shouldExclude = patterns.some(pattern => {
-            if (pattern === fileName || pattern === relativePath) return true;
-            if (pattern.includes('*')) {
-                const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-                return regex.test(fileName) || regex.test(relativePath);
-            }
-            return false;
-        });
-
-        if (shouldExclude) {
-            this.excludedPaths.add(filePath);
-            if (fs.statSync(filePath).isDirectory()) {
-                this.excludeDirectory(filePath);
-            }
-            this.saveState();
-        }
+    public async resetExclusions() {
+        if (!this.workspaceRoot) return;
+        this.manualIncludes.clear();
+        this.manualExcludes.clear();
+        this.saveState(); // Save the cleared state
+        this.refresh();
+        vscode.window.showInformationMessage('Manual exclusions have been reset.');
     }
 
-    private async initializeExclusions() {
+    private async recalculateAutoExclusions() {
+        this.autoExcludes.clear();
         if (!this.workspaceRoot) return;
 
-        this.loadState(); // Load saved user exclusions first
-
         const config = vscode.workspace.getConfiguration('repotxt');
-        const settings: ExclusionSettings = {
-            autoExcludeEnabled: config.get('autoExcludeEnabled', true),
-            autoExcludePatterns: config.get('autoExcludePatterns', []),
-            respectIgnoreFiles: config.get('respectIgnoreFiles', true),
-            ignoreFileNames: config.get('ignoreFileNames', ['.gitignore']),
-            excludeBinaryFiles: config.get('excludeBinaryFiles', true),
-            binaryFileExtensions: config.get('binaryFileExtensions', [])
-        };
-
-        if (settings.autoExcludeEnabled && settings.autoExcludePatterns.length > 0) {
-            await this.processExcludePatterns(settings.autoExcludePatterns);
+        
+        const autoExcludePatterns = config.get<string[]>('autoExcludePatterns', []);
+        if (config.get('autoExcludeEnabled', true) && autoExcludePatterns.length > 0) {
+            await this.processPatterns(autoExcludePatterns, this.autoExcludes);
         }
 
-        if (settings.respectIgnoreFiles) {
-            await this.processIgnoreFiles(settings.ignoreFileNames);
+        const ignoreFileNames = config.get<string[]>('ignoreFileNames', ['.gitignore']);
+        if (config.get('respectIgnoreFiles', true)) {
+            await this.processIgnoreFiles(ignoreFileNames);
         }
 
-        if (settings.excludeBinaryFiles) {
-            await this.processBinaryExclusions(settings.binaryFileExtensions);
+        const binaryExtensions = config.get<string[]>('binaryFileExtensions', []);
+        if (config.get('excludeBinaryFiles', true) && binaryExtensions.length > 0) {
+            await this.processBinaryExclusions(binaryExtensions);
         }
-
-        this.saveState(); // Save the combined state of automatic and manual exclusions
     }
     
     private async processBinaryExclusions(extensions: string[]) {
-        if (!this.workspaceRoot || extensions.length === 0) return;
-
+        if (!this.workspaceRoot) return;
         const globExtensions = extensions.map(ext => ext.startsWith('.') ? ext.substring(1) : ext);
         const globPattern = `**/*.{${globExtensions.join(',')}}`;
-
         const files = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
-        for (const file of files) {
-            this.excludedPaths.add(file.fsPath);
-        }
+        files.forEach(file => this.autoExcludes.add(file.fsPath));
     }
 
     private async processIgnoreFiles(fileNames: string[]) {
         if (!this.workspaceRoot) return;
-
         for (const fileName of fileNames) {
             const ignoreFilePath = path.join(this.workspaceRoot, fileName);
             if (!fs.existsSync(ignoreFilePath)) continue;
-
             try {
                 const fileStream = fs.createReadStream(ignoreFilePath);
-                const rl = readline.createInterface({
-                    input: fileStream,
-                    crlfDelay: Infinity
-                });
-
+                const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
                 const patterns: string[] = [];
                 for await (const line of rl) {
-                    if (line && !line.startsWith('#') && line.trim()) {
-                        patterns.push(line.trim());
-                    }
+                    const trimmedLine = line.trim();
+                    if (trimmedLine && !trimmedLine.startsWith('#')) patterns.push(trimmedLine);
                 }
-                await this.processExcludePatterns(patterns);
-            } catch (error) {
-                console.error(`Error processing ${fileName}:`, error);
-            }
+                await this.processPatterns(patterns, this.autoExcludes);
+            } catch (error) { console.error(`Error processing ${fileName}:`, error); }
         }
     }
-
-    private async processExcludePatterns(patterns: string[]) {
+    
+    private async processPatterns(patterns: string[], targetSet: Set<string>) {
         if (!this.workspaceRoot) return;
-
         for (const pattern of patterns) {
             if (!pattern) continue;
             try {
-                const matches = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
-                matches.forEach(uri => {
-                    this.excludedPaths.add(uri.fsPath);
-                });
-            } catch (error) {
-                console.error(`Error processing pattern ${pattern}:`, error);
-            }
+                let globPattern = pattern;
+                if (globPattern.endsWith('/')) globPattern += '**';
+                const matches = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
+                matches.forEach(uri => targetSet.add(uri.fsPath));
+            } catch (error) {/* Ignore invalid glob */}
+            try {
+                const directPath = path.join(this.workspaceRoot, pattern.replace(/\/$/, ''));
+                if (fs.existsSync(directPath)) targetSet.add(directPath);
+            } catch (error) { console.error(`Error checking direct path ${pattern}:`, error); }
         }
     }
 
 	private setupFileWatcher() {
-        if (this.fileWatcher) {
-            this.fileWatcher.dispose();
-        }
-
+        if (this.fileWatcher) this.fileWatcher.dispose();
         if (this.workspaceRoot) {
-            this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(this.workspaceRoot, '**/*')
-            );
-
-            this.fileWatcher.onDidCreate(async (uri) => {
-                await this.checkForAutoExclusion(uri.fsPath);
-                this.refresh();
-            });
+            this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
+            this.fileWatcher.onDidCreate(() => this.refresh());
             this.fileWatcher.onDidDelete(() => this.refresh());
         }
     }
 
-	private isPathExcluded(fullPath: string): boolean {
-        if (this.excludedPaths.has(fullPath)) {
-            return true;
-        }
-        for (const excludedPath of this.excludedPaths) {
-            if (fs.existsSync(excludedPath) && fs.statSync(excludedPath).isDirectory()) {
-                if (fullPath.startsWith(excludedPath + path.sep)) {
-                    return true;
-                }
-            }
-        }
+    private isPathExcluded(fullPath: string): boolean {
+        if (this.isPathInSet(fullPath, this.manualIncludes)) return false;
+        if (this.isPathInSet(fullPath, this.manualExcludes)) return true;
+        if (this.isPathInSet(fullPath, this.autoExcludes)) return true;
         return false;
     }
 
-	private excludeDirectory(dirPath: string): void {
-        try {
-            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = path.join(dirPath, entry.name);
-                this.excludedPaths.add(fullPath);
-                if (entry.isDirectory()) {
-                    this.excludeDirectory(fullPath);
-                }
+    private isPathInSet(fullPath: string, set: Set<string>): boolean {
+        if (set.has(fullPath)) return true;
+        for (const item of set) {
+            if (fs.existsSync(item) && fs.statSync(item).isDirectory()) {
+                if (fullPath.startsWith(item + path.sep)) return true;
             }
-        } catch (error) {
-            // Ignore errors for directories that might not exist or are inaccessible
         }
-    }
-
-	private includeDirectory(dirPath: string): void {
-        try {
-            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = path.join(dirPath, entry.name);
-                this.excludedPaths.delete(fullPath);
-                if (entry.isDirectory()) {
-                    this.includeDirectory(fullPath);
-                }
-            }
-        } catch (error) {
-            // Ignore errors
-        }
+        return false;
     }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
 
+    toggleExclude(item: FileTreeItem): void {
+        const isCurrentlyExcluded = this.isPathExcluded(item.fullPath);
+
+        this.manualIncludes.delete(item.fullPath);
+        this.manualExcludes.delete(item.fullPath);
+
+        if (isCurrentlyExcluded) {
+            this.manualIncludes.add(item.fullPath);
+        } else {
+            this.manualExcludes.add(item.fullPath);
+        }
+
+        this.saveState();
+        this.refresh();
+    }
+
     getTreeItem(element: FileTreeItem): vscode.TreeItem {
         const isExcluded = this.isPathExcluded(element.fullPath);
-        element.collapsibleState = (element.collapsibleState === vscode.TreeItemCollapsibleState.None || isExcluded)
-            ? vscode.TreeItemCollapsibleState.None
-            : vscode.TreeItemCollapsibleState.Collapsed;
+        const isDirectory = fs.existsSync(element.fullPath) && fs.statSync(element.fullPath).isDirectory();
 
-        const treeItem = new vscode.TreeItem(element.label as string, element.collapsibleState);
+        const collapsibleState = (isDirectory && !isExcluded)
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None;
+
+        const treeItem = new vscode.TreeItem(element.label as string, collapsibleState);
         treeItem.contextValue = isExcluded ? 'excluded' : 'included';
         
         if (isExcluded) {
@@ -266,13 +205,8 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
             treeItem.description = '(excluded)';
             treeItem.tooltip = 'Excluded from report';
         } else {
-            treeItem.iconPath = element.collapsibleState === vscode.TreeItemCollapsibleState.None ?
-                new vscode.ThemeIcon('file') :
-                new vscode.ThemeIcon('folder');
-        }
-
-        if (element.collapsibleState === vscode.TreeItemCollapsibleState.None && !isExcluded) {
-            treeItem.command = {
+            treeItem.iconPath = isDirectory ? new vscode.ThemeIcon('folder') : new vscode.ThemeIcon('file');
+            treeItem.command = isDirectory ? undefined : {
                 command: 'vscode.open',
                 arguments: [vscode.Uri.file(element.fullPath)],
                 title: 'Open File'
@@ -282,98 +216,58 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     }
 
     getChildren(element?: FileTreeItem): Thenable<FileTreeItem[]> {
-        if (!this.workspaceRoot) {
-            vscode.window.showInformationMessage('Open a folder or workspace to analyze.');
-            return Promise.resolve([]);
-        }
-
+        if (!this.workspaceRoot) return Promise.resolve([]);
+        if (element && this.isPathExcluded(element.fullPath)) return Promise.resolve([]);
+        
         const directoryPath = element ? element.fullPath : this.workspaceRoot;
-        if (element && this.isPathExcluded(element.fullPath)) {
-            return Promise.resolve([]);
-        }
         return Promise.resolve(this.getFileTree(directoryPath));
     }
 
     private getFileTree(directoryPath: string): FileTreeItem[] {
         const items: FileTreeItem[] = [];
         try {
-            const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
-                .map(entry => {
-                    const fullPath = path.join(directoryPath, entry.name);
-                    return { entry, fullPath, isExcluded: this.isPathExcluded(fullPath) };
-                })
-                .filter(({ isExcluded }) => !isExcluded) // Initially filter out excluded items
-                .sort((a, b) => {
-                    // Sort folders before files, then alphabetically
-                    const aIsDir = a.entry.isDirectory() ? 0 : 1;
-                    const bIsDir = b.entry.isDirectory() ? 0 : 1;
-                    if (aIsDir !== bIsDir) return aIsDir - bIsDir;
-                    return a.entry.name.localeCompare(b.entry.name);
-                });
-            
-            for (const { entry, fullPath, isExcluded } of entries) {
+            const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+            entries.sort((a, b) => {
+                const aIsDir = a.isDirectory() ? 0 : 1;
+                const bIsDir = b.isDirectory() ? 0 : 1;
+                if (aIsDir !== bIsDir) return aIsDir - bIsDir;
+                return a.name.localeCompare(b.name);
+            });
+            for (const entry of entries) {
+                const fullPath = path.join(directoryPath, entry.name);
                 items.push({
                     label: entry.name,
                     fullPath: fullPath,
-                    excluded: isExcluded,
+                    excluded: this.isPathExcluded(fullPath),
                     collapsibleState: entry.isDirectory() 
                         ? vscode.TreeItemCollapsibleState.Collapsed 
                         : vscode.TreeItemCollapsibleState.None
                 });
             }
-        } catch (error) {
-            console.error('Error reading directory:', error);
-        }
+        } catch (error) { console.error('Error reading directory:', error); }
         return items;
-    }
-
-    toggleExclude(item: FileTreeItem): void {
-        const isCurrentlyExcluded = this.isPathExcluded(item.fullPath);
-    
-        if (isCurrentlyExcluded) {
-            this.excludedPaths.delete(item.fullPath);
-            if (fs.statSync(item.fullPath).isDirectory()) {
-                this.includeDirectory(item.fullPath);
-            }
-        } else {
-            this.excludedPaths.add(item.fullPath);
-            if (fs.statSync(item.fullPath).isDirectory()) {
-                this.excludeDirectory(item.fullPath);
-            }
-        }
-        this.saveState();
-        this.refresh();
     }
 
     private async readFileContent(filePath: string): Promise<string> {
         try {
             const config = vscode.workspace.getConfiguration('repotxt');
             const binaryExtensions = config.get<string[]>('binaryFileExtensions', []);
-            const fileExt = path.extname(filePath);
-
-            if (binaryExtensions.includes(fileExt)) {
-                return '[Binary file, content not displayed]';
-            }
+            if (binaryExtensions.includes(path.extname(filePath))) return '[Binary file, content not displayed]';
             return fs.readFileSync(filePath, 'utf8');
-        } catch {
-            return '[Unable to read file content]';
-        }
+        } catch { return '[Unable to read file content]'; }
     }
 
     private async buildReportStructure(dirPath: string, structure: string[] = []): Promise<string[]> {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
-        
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
             if (this.isPathExcluded(fullPath)) continue;
-
             const relativePath = path.relative(this.workspaceRoot!, fullPath);
-
             if (entry.isDirectory()) {
                 await this.buildReportStructure(fullPath, structure);
             } else {
                 const content = await this.readFileContent(fullPath);
-                const posixPath = relativePath.split(path.sep).join(path.posix.sep); // Ensure posix paths in report
+                const posixPath = relativePath.split(path.sep).join(path.posix.sep);
                 structure.push(`--- START OF FILE ${posixPath} ---\n\n${content}\n\n--- END OF FILE ${posixPath} ---`);
             }
         }
@@ -382,48 +276,37 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
 
     private async generateFolderStructure(dirPath: string, prefix: string = ''): Promise<string> {
         let result = '';
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-            .sort((a, b) => {
-                const aIsDir = a.isDirectory() ? 0 : 1;
-                const bIsDir = b.isDirectory() ? 0 : 1;
-                if (aIsDir !== bIsDir) return aIsDir - bIsDir;
-                return a.name.localeCompare(b.name);
-            });
-    
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => {
+            const aIsDir = a.isDirectory() ? 0 : 1;
+            const bIsDir = b.isDirectory() ? 0 : 1;
+            if (aIsDir !== bIsDir) return aIsDir - bIsDir;
+            return a.name.localeCompare(b.name);
+        });
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
             if (!this.isPathExcluded(fullPath)) {
                 const posixName = entry.name.split(path.sep).join(path.posix.sep);
                 result += `${prefix}${posixName}${entry.isDirectory() ? '/' : ''}\n`;
-                if (entry.isDirectory()) {
-                    result += await this.generateFolderStructure(fullPath, prefix + '  ');
-                }
+                if (entry.isDirectory()) result += await this.generateFolderStructure(fullPath, prefix + '  ');
             }
         }
         return result;
     }
 
     async generateReport(): Promise<string> {
-        if (!this.workspaceRoot) {
-            return 'No workspace folder opened';
-        }
-    
+        if (!this.workspaceRoot) return 'No workspace folder opened';
         let report = '';
         const config = vscode.workspace.getConfiguration('repotxt');
         const useAiStyle = config.get('aiStyle', false);
         const workspaceName = path.basename(this.workspaceRoot);
-        
         if (useAiStyle) {
             const aiPrompt = config.get('aiPrompt', '');
             report += aiPrompt.replace('${workspaceName}', workspaceName) + '\n\n';
         }
-
         const folderStructure = await this.generateFolderStructure(this.workspaceRoot);
         report += `Folder Structure: ${workspaceName}\n${folderStructure}\n`;
-
         const fileContents = await this.buildReportStructure(this.workspaceRoot);
         report += fileContents.join('\n\n');
-    
         return report;
     }
 }
@@ -431,24 +314,12 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
 export function activate(context: vscode.ExtensionContext) {
     const repoAnalyzerProvider = new RepoAnalyzerProvider(context);
     
-    vscode.window.createTreeView('repotxt', {
-        treeDataProvider: repoAnalyzerProvider,
-        showCollapseAll: true
-    });
+    vscode.window.createTreeView('repotxt', { treeDataProvider: repoAnalyzerProvider, showCollapseAll: true });
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('repotxt.refresh', () => {
-            repoAnalyzerProvider.refresh();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('repotxt.toggleExclude', (item: FileTreeItem) => {
-            repoAnalyzerProvider.toggleExclude(item);
-        })
-    );
-
-    context.subscriptions.push(
+        vscode.commands.registerCommand('repotxt.refresh', () => repoAnalyzerProvider.refresh()),
+        vscode.commands.registerCommand('repotxt.toggleExclude', (item: FileTreeItem) => repoAnalyzerProvider.toggleExclude(item)),
+        vscode.commands.registerCommand('repotxt.resetExclusions', () => repoAnalyzerProvider.resetExclusions()),
         vscode.commands.registerCommand('repotxt.generateReport', async () => {
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -457,16 +328,8 @@ export function activate(context: vscode.ExtensionContext) {
             }, async (progress) => {
                 progress.report({ increment: 0 });
                 const report = await repoAnalyzerProvider.generateReport();
-                
-                const document = await vscode.workspace.openTextDocument({
-                    content: report,
-                    language: 'markdown'
-                });
-                
-                await vscode.window.showTextDocument(document, {
-                    preview: false,
-                    viewColumn: vscode.ViewColumn.Beside
-                });
+                const document = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' });
+                await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Beside });
                 progress.report({ increment: 100 });
             });
         })
