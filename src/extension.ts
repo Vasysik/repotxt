@@ -73,7 +73,7 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         if (!this.workspaceRoot) return;
         this.manualIncludes.clear();
         this.manualExcludes.clear();
-        this.saveState(); // Save the cleared state
+        this.saveState();
         this.refresh();
         vscode.window.showInformationMessage('Manual exclusions have been reset.');
     }
@@ -101,7 +101,7 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     }
     
     private async processBinaryExclusions(extensions: string[]) {
-        if (!this.workspaceRoot) return;
+        if (!this.workspaceRoot || extensions.length === 0) return;
         const globExtensions = extensions.map(ext => ext.startsWith('.') ? ext.substring(1) : ext);
         const globPattern = `**/*.{${globExtensions.join(',')}}`;
         const files = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
@@ -142,13 +142,22 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
             } catch (error) { console.error(`Error checking direct path ${pattern}:`, error); }
         }
     }
-
+    
 	private setupFileWatcher() {
         if (this.fileWatcher) this.fileWatcher.dispose();
         if (this.workspaceRoot) {
-            this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
-            this.fileWatcher.onDidCreate(() => this.refresh());
-            this.fileWatcher.onDidDelete(() => this.refresh());
+            this.fileWatcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(this.workspaceRoot, '**/*')
+            );
+
+            const handleFileChange = async () => {
+                await this.recalculateAutoExclusions();
+                this.refresh();
+            };
+
+            this.fileWatcher.onDidCreate(handleFileChange);
+            this.fileWatcher.onDidDelete(handleFileChange);
+            this.fileWatcher.onDidChange(handleFileChange);
         }
     }
 
@@ -175,31 +184,26 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
 
     toggleExclude(item: FileTreeItem): void {
         const isCurrentlyExcluded = this.isPathExcluded(item.fullPath);
-
         this.manualIncludes.delete(item.fullPath);
         this.manualExcludes.delete(item.fullPath);
-
         if (isCurrentlyExcluded) {
             this.manualIncludes.add(item.fullPath);
         } else {
             this.manualExcludes.add(item.fullPath);
         }
-
         this.saveState();
         this.refresh();
     }
-
+    
     getTreeItem(element: FileTreeItem): vscode.TreeItem {
         const isExcluded = this.isPathExcluded(element.fullPath);
         const isDirectory = fs.existsSync(element.fullPath) && fs.statSync(element.fullPath).isDirectory();
-
         const collapsibleState = (isDirectory && !isExcluded)
             ? vscode.TreeItemCollapsibleState.Collapsed
             : vscode.TreeItemCollapsibleState.None;
 
         const treeItem = new vscode.TreeItem(element.label as string, collapsibleState);
         treeItem.contextValue = isExcluded ? 'excluded' : 'included';
-        
         if (isExcluded) {
             treeItem.iconPath = new vscode.ThemeIcon('eye-closed');
             treeItem.description = '(excluded)';
@@ -218,7 +222,6 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     getChildren(element?: FileTreeItem): Thenable<FileTreeItem[]> {
         if (!this.workspaceRoot) return Promise.resolve([]);
         if (element && this.isPathExcluded(element.fullPath)) return Promise.resolve([]);
-        
         const directoryPath = element ? element.fullPath : this.workspaceRoot;
         return Promise.resolve(this.getFileTree(directoryPath));
     }
