@@ -4,11 +4,12 @@ A VS Code extension that helps you analyze and generate comprehensive reports of
 
 ## Features
 
-- **Interactive File Tree**: Browse your repository structure with an interactive tree view, click to open files
-- **Selective Analysis**: Include or exclude specific files and folders from analysis
-- **AI-Enhanced Analysis**: Generate AI-powered analysis reports
-- **Report Generation**: Generate detailed reports of your repository content
-- **Real-Time Updates**: Automatically updates when files change in your workspace
+- **Project-Specific Sessions**: Your excluded files are saved per project and restored when you reopen VS Code.
+- **Interactive File Tree**: Browse your repository structure with an interactive tree view, click to open files.
+- **Selective Analysis**: Include or exclude specific files and folders from analysis.
+- **AI-Enhanced Analysis**: Generate AI-powered analysis reports.
+- **Report Generation**: Generate detailed reports of your repository content.
+- **Real-Time Updates**: Automatically updates when files change in your workspace.
 
 ### File Tree and Exclusion
 The extension provides a tree view of your repository where you can:
@@ -16,6 +17,7 @@ The extension provides a tree view of your repository where you can:
 - Click files to open them in the editor
 - Toggle files/folders to include/exclude from analysis
 - See excluded items marked with a closed eye icon
+- Your exclusion choices are saved for each project.
 
 ### Analysis Types
 - **Regular Analysis**: Basic file structure and content analysis
@@ -38,7 +40,7 @@ Generate comprehensive reports that include:
 
 ## Extension Controls
 
-- **Toggle Exclude** (eye icon): Include/exclude files from analysis
+- **Toggle Exclude** (eye icon): Include/exclude files from analysis. Your choice is saved for the project.
 - **Generate Report** (notebook icon): Create a new analysis report
 - **Refresh** (refresh icon): Update the file tree view
 
@@ -49,37 +51,27 @@ The extension can be configured through VS Code settings:
 ### Analysis Settings
 - `repotxt.aiStyle`: Enable/disable AI-enhanced analysis
   - Default: `false`
-  - When enabled, generates reports with AI-powered analysis
-
-- `repotxt.aiPrompt`: Customize the AI analysis prompt
-  - Default: Full analysis prompt text
-  - Modify to change how AI analyzes your repository
+- `repotxt.aiPrompt`: Customize the AI analysis prompt.
 
 ### Auto-Exclude Settings
-- `repotxt.autoExcludeEnabled`: Enable/disable automatic file exclusion
+- `repotxt.autoExcludeEnabled`: Enable/disable automatic file exclusion based on patterns.
   - Default: `true`
-  - When enabled, automatically excludes common development files and folders
+- `repotxt.autoExcludePatterns`: Patterns of files and folders to automatically exclude.
+  - Default patterns: `node_modules`, `.git`, `dist`, `build`, etc.
+  - Supports glob patterns like `*.log`.
 
-- `repotxt.autoExcludePatterns`: Patterns of files and folders to automatically exclude
-  - Default patterns:
-    ```
-    node_modules
-    .git
-    dist
-    build
-    out
-    coverage
-    .env
-    *.log
-    package-lock.json
-    yarn.lock
-    ```
-  - Supports glob patterns like `*.log`
-
-### Git Integration
-- `repotxt.respectGitignore`: Automatically exclude files listed in .gitignore
+### Ignore File Integration
+- `repotxt.respectIgnoreFiles`: Automatically exclude files listed in ignore files.
   - Default: `true`
-  - When enabled, reads and respects your repository's .gitignore file
+- `repotxt.ignoreFileNames`: A list of filenames to treat as ignore files.
+  - Default: `[".gitignore"]`
+  - You can add other files like `.dockerignore`, `.eslintignore`, etc.
+
+### Binary File Handling
+- `repotxt.excludeBinaryFiles`: Automatically exclude binary files from analysis.
+  - Default: `true`
+- `repotxt.binaryFileExtensions`: A list of file extensions to be considered binary.
+  - Default: A comprehensive list of image, archive, and executable extensions.
 
 You can modify these settings in VS Code:
 1. Open Settings (Ctrl/Cmd + ,)
@@ -88,7 +80,7 @@ You can modify these settings in VS Code:
 
 ## Requirements
 
-- Visual Studio Code version 1.96.0 or higher
+- Visual Studio Code version 1.90.0 or higher
 - A workspace/folder opened in VS Code
 
 ## Contributing

@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -79,7 +79,7 @@
         "repotxt.autoExcludeEnabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable/disable automatic file exclusion"
+          "description": "Enable/disable automatic file exclusion based on patterns."
         },
         "repotxt.autoExcludePatterns": {
           "type": "array",
@@ -98,17 +98,48 @@
           "items": {
             "type": "string"
           },
-          "description": "Patterns to automatically exclude from the repository analysis"
+          "description": "Patterns to automatically exclude from the repository analysis."
         },
-        "repotxt.respectGitignore": {
+        "repotxt.respectIgnoreFiles": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically exclude files and folders listed in .gitignore"
+          "description": "Automatically exclude files and folders listed in ignore files (like .gitignore)."
+        },
+        "repotxt.ignoreFileNames": {
+          "type": "array",
+          "default": [
+            ".gitignore"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "List of filenames to treat as ignore files (e.g., .gitignore, .dockerignore)."
+        },
+        "repotxt.excludeBinaryFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically exclude binary files from analysis and the report."
+        },
+        "repotxt.binaryFileExtensions": {
+          "type": "array",
+          "default": [
+            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".ico", ".pdf",
+            ".zip", ".gz", ".rar", ".7z",
+            ".mp3", ".wav", ".ogg", ".mp4", ".mov", ".avi", ".mkv",
+            ".exe", ".dll", ".so", ".app", ".dmg",
+            ".woff", ".woff2", ".eot", ".ttf", ".otf",
+            ".class", ".jar", ".pyc", ".pyo",
+            ".db", ".sqlite", ".sqlite3"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "List of file extensions to be considered binary and automatically excluded."
         },
         "repotxt.aiStyle": {
           "type": "boolean",
           "default": false,
-          "description": "Enable AI-style analysis"
+          "description": "Enable AI-style analysis."
         },
         "repotxt.aiPrompt": {
           "type": "string",
