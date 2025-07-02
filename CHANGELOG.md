@@ -16,6 +16,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Core Exclusion Logic**: Completely refactored the exclusion logic to correctly prioritize manual overrides over automatic rules, fixing the bug where session choices were ignored after a restart.
 - **`.gitignore` Folder Exclusion**: Fixed a critical bug where folders listed in `.gitignore` (like `dist`, `node_modules`) were not being excluded correctly.
 
+## [0.1.3] - 2025-07-2
+
+### Fixed
+- **Critical:** Fixed a bug where files/folders inside a manually included directory could not be excluded. Rule hierarchy is now correctly respected.
+
 ## [Unreleased]
 
 - Initial release
