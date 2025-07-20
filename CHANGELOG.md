@@ -32,6 +32,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   - **Consistent Report Generation:** The report generator's logic is now perfectly synchronized with the visual tree. What you see is what you get in the final report.
   - **Toggling Parent Behavior:** Toggling a parent folder's exclusion state now correctly clears any conflicting manual rules on its children.
 
+## [0.2.2] - 2025-07-20
+
+### Fixed
+
+- **Report Format:** Restored the original, clean report format (`File: ... Content: ...`) and fixed the folder structure generation to produce a flat list of paths instead of an indented tree.
+
 ## [Unreleased]
 
 - Initial release

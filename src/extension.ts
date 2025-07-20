@@ -148,14 +148,14 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         };
         const manualRule = check(fullPath);
         if (manualRule !== null) return manualRule;
-
-        const autoCheck = (p: string): boolean | null => {
+        
+        const autoCheck = (p: string): boolean => {
              const pWithSep = p + path.sep;
              if(this.autoExcludes.has(p) || this.autoExcludes.has(pWithSep)) return true;
              const parent = path.dirname(p);
-             return parent === p ? null : autoCheck(parent);
+             return parent === p ? false : autoCheck(parent);
         };
-        return autoCheck(fullPath) ?? false;
+        return autoCheck(fullPath);
     }
 
     private addPathToSet(fullPath: string, set: Set<string>) {
@@ -211,13 +211,11 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
     private isPathVisuallyExcluded(fullPath: string): boolean {
         const isEffectivelyExcluded = this.isPathEffectivelyExcluded(fullPath);
         if (!isEffectivelyExcluded) return false;
-
         try {
-            if (fs.statSync(fullPath).isDirectory()) {
-                if (this.folderContainsManualIncludes(fullPath)) return false;
+            if (fs.statSync(fullPath).isDirectory() && this.folderContainsManualIncludes(fullPath)) {
+                return false;
             }
         } catch (e) { /* ignore */ }
-        
         return true;
     }
 
@@ -261,45 +259,50 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
                 .map(entry => ({
                     label: entry.name,
                     fullPath: path.join(directoryPath, entry.name),
-                    excluded: false,
+                    excluded: false, 
                     collapsibleState: entry.isDirectory() ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
                 }));
         } catch (error) { return []; }
     }
 
-    private async buildReportStructure(dirPath: string, structure: string[] = []): Promise<string[]> {
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
-        for (const entry of entries) {
-            const fullPath = path.join(dirPath, entry.name);
-            if (entry.isDirectory()) {
-                await this.buildReportStructure(fullPath, structure);
-            } else if (!this.isPathEffectivelyExcluded(fullPath)) {
-                const content = await this.readFileContent(fullPath);
-                const posixPath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
-                structure.push(`--- START OF FILE ${posixPath} ---\n\n${content}\n\n--- END OF FILE ${posixPath} ---`);
-            }
-        }
-        return structure;
-    }
-
-    private async generateFolderStructure(dirPath: string, prefix: string = ''): Promise<string> {
-        let result = '';
+    private async getFlatStructure(dirPath: string, structureList: string[]): Promise<void> {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => {
             const aIsDir = a.isDirectory() ? 0 : 1;
             const bIsDir = b.isDirectory() ? 0 : 1;
             return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
         });
+
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
-            if (!this.isPathVisuallyExcluded(fullPath)) {
-                const posixName = entry.name.split(path.sep).join(path.posix.sep);
-                result += `${prefix}${posixName}${entry.isDirectory() ? '/' : ''}\n`;
-                if (entry.isDirectory()) {
-                    result += await this.generateFolderStructure(fullPath, prefix + '  ');
-                }
+            if (this.isPathVisuallyExcluded(fullPath)) continue;
+
+            const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
+            structureList.push(relativePath + (entry.isDirectory() ? '/' : ''));
+
+            if (entry.isDirectory()) {
+                await this.getFlatStructure(fullPath, structureList);
             }
         }
-        return result;
+    }
+
+    private async generateFileContentBlocks(dirPath: string): Promise<string[]> {
+        const results: string[] = [];
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+
+        for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
+            if (this.isPathEffectivelyExcluded(fullPath)) continue;
+
+            if (entry.isDirectory()) {
+                const subResults = await this.generateFileContentBlocks(fullPath);
+                results.push(...subResults);
+            } else {
+                const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
+                const content = await this.readFileContent(fullPath);
+                results.push(`File: ${relativePath}\nContent: ${content}\n`);
+            }
+        }
+        return results;
     }
 
     private async readFileContent(filePath: string): Promise<string> {
@@ -320,10 +323,14 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         
         this.hasIncludesCache.clear();
         
-        const folderStructure = await this.generateFolderStructure(this.workspaceRoot);
-        report += `Folder Structure: ${workspaceName}\n${folderStructure}\n`;
-        const fileContents = await this.buildReportStructure(this.workspaceRoot);
-        report += fileContents.join('\n\n');
+        const structureList: string[] = [];
+        await this.getFlatStructure(this.workspaceRoot, structureList);
+        const folderStructure = structureList.join('\n');
+        report += `Folder Structure: ${workspaceName}\n${folderStructure}\n\n`;
+
+        const fileContents = await this.generateFileContentBlocks(this.workspaceRoot);
+        report += fileContents.join('\n');
+
         return report;
     }
 }
