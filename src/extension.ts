@@ -149,13 +149,13 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
         const manualRule = check(fullPath);
         if (manualRule !== null) return manualRule;
         
-        const autoCheck = (p: string): boolean => {
+        const autoCheck = (p: string): boolean | null => {
              const pWithSep = p + path.sep;
              if(this.autoExcludes.has(p) || this.autoExcludes.has(pWithSep)) return true;
              const parent = path.dirname(p);
-             return parent === p ? false : autoCheck(parent);
+             return parent === p ? null : autoCheck(parent);
         };
-        return autoCheck(fullPath);
+        return autoCheck(fullPath) ?? false;
     }
 
     private addPathToSet(fullPath: string, set: Set<string>) {
@@ -291,7 +291,7 @@ class RepoAnalyzerProvider implements vscode.TreeDataProvider<FileTreeItem> {
 
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
-            if (this.isPathEffectivelyExcluded(fullPath)) continue;
+            if (this.isPathVisuallyExcluded(fullPath)) continue;
 
             if (entry.isDirectory()) {
                 const subResults = await this.generateFileContentBlocks(fullPath);
