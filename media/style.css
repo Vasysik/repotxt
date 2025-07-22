@@ -1,0 +1,288 @@
+:root {
+    --bg-primary: var(--vscode-sideBar-background);
+    --bg-secondary: var(--vscode-editor-background);
+    --bg-hover: var(--vscode-list-hoverBackground);
+    --bg-active: var(--vscode-list-activeSelectionBackground);
+    --text-primary: var(--vscode-sideBar-foreground);
+    --text-secondary: var(--vscode-descriptionForeground);
+    --border: var(--vscode-sideBar-border);
+    --accent: var(--vscode-focusBorder);
+    --button-bg: var(--vscode-button-background);
+    --button-fg: var(--vscode-button-foreground);
+    --button-hover: var(--vscode-button-hoverBackground);
+    --excluded: var(--vscode-disabledForeground);
+    --tree-indent: 20px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    overflow: hidden;
+    user-select: none;
+}
+
+.app-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+}
+
+.toolbar-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.btn-icon {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.15s ease;
+    padding: 4px;
+}
+
+.btn-icon:hover {
+    background: var(--bg-hover);
+}
+
+.btn-icon:active {
+    transform: scale(0.95);
+}
+
+.btn-icon.primary {
+    background: var(--button-bg);
+    color: var(--button-fg);
+}
+
+.btn-icon.primary:hover {
+    background: var(--button-hover);
+}
+
+.btn-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.tooltip {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 1000;
+}
+
+.btn-icon:hover .tooltip {
+    opacity: 1;
+}
+
+.file-tree {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+}
+
+.tree-node {
+    position: relative;
+}
+
+.node-content {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    cursor: pointer;
+    position: relative;
+}
+
+.node-content:hover {
+    background: var(--bg-hover);
+}
+
+.node-content.selected {
+    background: var(--bg-active);
+}
+
+.node-arrow {
+    width: 16px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.arrow-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.15s ease;
+}
+
+.arrow-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.node-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.node-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.folder-icon {
+    color: var(--vscode-symbolIcon-folderForeground, #C5A572);
+}
+
+.file-icon {
+    color: var(--vscode-symbolIcon-fileForeground, #519ABA);
+}
+
+.node-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.node-excluded .node-content {
+    opacity: 0.5;
+}
+
+.node-excluded .node-name {
+    text-decoration: line-through;
+}
+
+.node-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.node-content:hover .node-actions {
+    opacity: 1;
+}
+
+.eye-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    padding: 2px;
+}
+
+.eye-btn:hover {
+    background: var(--bg-active);
+    color: var(--text-primary);
+}
+
+.eye-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.node-children {
+    display: none;
+}
+
+.node-children.expanded {
+    display: block;
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-secondary);
+}
+
+.empty-icon {
+    width: 48px;
+    height: 48px;
+    opacity: 0.3;
+}

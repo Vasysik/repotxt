@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.2.4",
+  "version": "0.2.7",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -32,6 +32,13 @@
           "name": "Repository Files",
           "icon": "$(output-view-icon)",
           "contextualTitle": "Repository Files"
+        },
+        {
+          "type": "webview",
+          "id": "repotxt.webview",
+          "name": "Repository Analyzer",
+          "icon": "$(output-view-icon)",
+          "contextualTitle": "Repository Analyzer"
         }
       ]
     },
@@ -55,6 +62,16 @@
         "command": "repotxt.resetExclusions",
         "title": "Reset Exclusions to Default",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "repotxt.excludeAll",
+        "title": "Exclude All Files",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "repotxt.includeAll",
+        "title": "Include All Files",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -77,9 +94,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "repotxt.resetExclusions",
+          "command": "repotxt.excludeAll",
           "when": "view == repotxt",
           "group": "navigation@3"
+        },
+        {
+          "command": "repotxt.includeAll",
+          "when": "view == repotxt",
+          "group": "navigation@4"
+        },
+        {
+          "command": "repotxt.resetExclusions",
+          "when": "view == repotxt",
+          "group": "navigation@5"
         }
       ]
     },
@@ -133,13 +160,42 @@
         "repotxt.binaryFileExtensions": {
           "type": "array",
           "default": [
-            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".ico", ".pdf",
-            ".zip", ".gz", ".rar", ".7z",
-            ".mp3", ".wav", ".ogg", ".mp4", ".mov", ".avi", ".mkv",
-            ".exe", ".dll", ".so", ".app", ".dmg",
-            ".woff", ".woff2", ".eot", ".ttf", ".otf",
-            ".class", ".jar", ".pyc", ".pyo",
-            ".db", ".sqlite", ".sqlite3"
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".tiff",
+            ".ico",
+            ".pdf",
+            ".zip",
+            ".gz",
+            ".rar",
+            ".7z",
+            ".mp3",
+            ".wav",
+            ".ogg",
+            ".mp4",
+            ".mov",
+            ".avi",
+            ".mkv",
+            ".exe",
+            ".dll",
+            ".so",
+            ".app",
+            ".dmg",
+            ".woff",
+            ".woff2",
+            ".eot",
+            ".ttf",
+            ".otf",
+            ".class",
+            ".jar",
+            ".pyc",
+            ".pyo",
+            ".db",
+            ".sqlite",
+            ".sqlite3"
           ],
           "items": {
             "type": "string"
