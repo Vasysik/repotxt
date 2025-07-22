@@ -318,10 +318,10 @@ export class RepoAnalyzerCore {
 
     async getWebviewData(): Promise<any[]> {
         if (!this.workspaceRoot) return [];
-        return this.getWebviewFileTree(this.workspaceRoot);
+        return this.getWebviewFileTree(this.workspaceRoot, 0, 0);
     }
 
-    private async getWebviewFileTree(directoryPath: string, depth: number = 0, maxDepth: number = 10): Promise<any[]> {
+    private async getWebviewFileTree(directoryPath: string, depth: number = 0, maxDepth: number = 0): Promise<any[]> {
         if (depth > maxDepth) return [];
         
         try {
@@ -341,12 +341,8 @@ export class RepoAnalyzerCore {
                     fullPath: fullPath,
                     isDirectory: entry.isDirectory(),
                     excluded: isExcluded,
-                    children: []
+                    children: entry.isDirectory() ? null : []
                 };
-
-                if (entry.isDirectory() && depth < maxDepth) {
-                    item.children = await this.getWebviewFileTree(fullPath, depth + 1, maxDepth);
-                }
 
                 result.push(item);
             }
@@ -354,6 +350,10 @@ export class RepoAnalyzerCore {
         } catch (error) {
             return [];
         }
+    }
+
+    async getWebviewChildren(directoryPath: string): Promise<any[]> {
+        return this.getWebviewFileTree(directoryPath, 0, 0);
     }
 
     getWorkspaceRoot(): string | undefined {

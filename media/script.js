@@ -5,12 +5,14 @@ let selectedNodes = new Set();
 let lastSelectedNode = null;
 let allNodePaths = [];
 let renderTimeout = null;
+let loadedChildren = new Map();
 
 const $ = (id) => document.getElementById(id);
 
 function initializeEventListeners() {
     $('refreshBtn').addEventListener('click', () => {
         showTooltip('refreshBtn', 'Refreshing...');
+        loadedChildren.clear();
         vscode.postMessage({ type: 'refresh' });
     });
 
@@ -20,6 +22,7 @@ function initializeEventListeners() {
 
     $('resetBtn').addEventListener('click', () => {
         showTooltip('resetBtn', 'Resetting...');
+        loadedChildren.clear();
         vscode.postMessage({ type: 'resetExclusions' });
     });
 
@@ -60,6 +63,29 @@ window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
         fileTreeData = message.data;
+        loadedChildren.clear();
+        debouncedRender();
+    } else if (message.type === 'children') {
+        const cachedData = loadedChildren.get(message.path) || {};
+        cachedData.children = message.data;
+        loadedChildren.set(message.path, cachedData);
+        
+        function updateNodeChildren(nodes, targetPath, newChildren) {
+            for (const node of nodes) {
+                if (node.fullPath === targetPath) {
+                    node.children = newChildren;
+                    return true;
+                }
+                if (node.children && node.children.length > 0) {
+                    if (updateNodeChildren(node.children, targetPath, newChildren)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        updateNodeChildren(fileTreeData, message.path, message.data);
         debouncedRender();
     }
 });
@@ -119,6 +145,13 @@ function getNodesBetween(startPath, endPath) {
     return allNodePaths.slice(from, to + 1);
 }
 
+async function loadChildren(node, nodeId) {
+    if (node.children === null && !loadedChildren.has(node.fullPath)) {
+        loadedChildren.set(node.fullPath, { loading: true });
+        vscode.postMessage({ type: 'getChildren', path: node.fullPath });
+    }
+}
+
 function createTreeNode(node, level, parentPath) {
     const nodeId = parentPath ? `${parentPath}/${node.name}` : node.name;
     const nodeElement = document.createElement('div');
@@ -134,7 +167,9 @@ function createTreeNode(node, level, parentPath) {
     
     content.style.paddingLeft = `${level * 20 + 8}px`;
 
-    if (node.isDirectory && node.children && node.children.length > 0) {
+    const hasChildren = node.isDirectory && (node.children === null || (node.children && node.children.length > 0));
+    
+    if (hasChildren) {
         const arrow = document.createElement('div');
         arrow.className = 'node-arrow';
         arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(nodeId) ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -143,9 +178,9 @@ function createTreeNode(node, level, parentPath) {
                 : '<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0719 8.02397L5.7146 3.66666L6.33332 3.04794L11 7.71461V8.33333L6.33332 13L5.7146 12.3813L10.0719 8.02397Z" fill="currentColor"/>'}
         </svg>`;
 
-        arrow.addEventListener('click', (e) => {
+        arrow.addEventListener('click', async (e) => {
             e.stopPropagation();
-            toggleNode(nodeId);
+            await toggleNode(nodeId, node);
         });
 
         content.appendChild(arrow);
@@ -209,7 +244,7 @@ function createTreeNode(node, level, parentPath) {
     content.appendChild(name);
     content.appendChild(actions);
 
-    content.addEventListener('click', (e) => {
+    content.addEventListener('click', async (e) => {
         const ctrlPressed = e.ctrlKey || e.metaKey;
         const shiftPressed = e.shiftKey;
         
@@ -234,20 +269,32 @@ function createTreeNode(node, level, parentPath) {
 
         if (!node.isDirectory && !ctrlPressed && !shiftPressed) {
             vscode.postMessage({ type: 'openFile', path: node.fullPath });
-        } else if (node.isDirectory && node.children && node.children.length > 0 && !ctrlPressed && !shiftPressed) {
-            toggleNode(nodeId);
+        } else if (node.isDirectory && hasChildren && !ctrlPressed && !shiftPressed) {
+            await toggleNode(nodeId, node);
         }
     });
 
     nodeElement.appendChild(content);
 
-    if (node.isDirectory && node.children && node.children.length > 0) {
+    if (node.isDirectory && expandedNodes.has(nodeId)) {
         const childrenContainer = document.createElement('div');
-        childrenContainer.className = 'node-children' + (expandedNodes.has(nodeId) ? ' expanded' : '');
+        childrenContainer.className = 'node-children expanded';
 
-        node.children.forEach(child => {
-            childrenContainer.appendChild(createTreeNode(child, level + 1, nodeId));
-        });
+        if (node.children === null) {
+            const loadingEl = document.createElement('div');
+            loadingEl.style.paddingLeft = `${(level + 1) * 20 + 8}px`;
+            loadingEl.style.height = '22px';
+            loadingEl.style.display = 'flex';
+            loadingEl.style.alignItems = 'center';
+            loadingEl.style.opacity = '0.6';
+            loadingEl.innerHTML = '<span style="font-size: 11px;">Loading...</span>';
+            childrenContainer.appendChild(loadingEl);
+            loadChildren(node, nodeId);
+        } else if (node.children && node.children.length > 0) {
+            node.children.forEach(child => {
+                childrenContainer.appendChild(createTreeNode(child, level + 1, nodeId));
+            });
+        }
 
         nodeElement.appendChild(childrenContainer);
     }
@@ -255,11 +302,14 @@ function createTreeNode(node, level, parentPath) {
     return nodeElement;
 }
 
-function toggleNode(nodeId) {
+async function toggleNode(nodeId, node) {
     if (expandedNodes.has(nodeId)) {
         expandedNodes.delete(nodeId);
     } else {
         expandedNodes.add(nodeId);
+        if (node && node.children === null) {
+            await loadChildren(node, nodeId);
+        }
     }
     renderFileTree();
 }
