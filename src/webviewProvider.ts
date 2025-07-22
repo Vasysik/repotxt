@@ -56,7 +56,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     vscode.commands.executeCommand('vscode.open', vscode.Uri.file(data.path));
                     break;
                 case 'openSettings':
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'repotxt');
+                    vscode.commands.executeCommand('workbench.action.openSettings', '@ext:TUBIK-corp.repotxt');
                     break;
             }
         });
