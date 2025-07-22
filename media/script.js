@@ -59,11 +59,40 @@ function showTooltip(btnId, text) {
     }, 1500);
 }
 
+function mergeTreeData(newData, oldData) {
+    const oldDataMap = new Map();
+    
+    function buildMap(nodes) {
+        nodes.forEach(node => {
+            oldDataMap.set(node.fullPath, node);
+            if (node.children && node.children.length > 0) {
+                buildMap(node.children);
+            }
+        });
+    }
+    
+    if (oldData) {
+        buildMap(oldData);
+    }
+    
+    function mergeNodes(newNodes) {
+        return newNodes.map(newNode => {
+            const oldNode = oldDataMap.get(newNode.fullPath);
+            if (oldNode && oldNode.children && oldNode.children.length > 0 && newNode.children === null) {
+                newNode.children = mergeNodes(oldNode.children);
+            }
+            return newNode;
+        });
+    }
+    
+    return mergeNodes(newData);
+}
+
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
-        fileTreeData = message.data;
-        loadedChildren.clear();
+        const mergedData = mergeTreeData(message.data, fileTreeData);
+        fileTreeData = mergedData;
         debouncedRender();
     } else if (message.type === 'children') {
         const cachedData = loadedChildren.get(message.path) || {};
@@ -220,20 +249,6 @@ function createTreeNode(node, level, parentPath) {
         const pathsToToggle = selectedNodes.has(node.fullPath) 
             ? Array.from(selectedNodes) 
             : [node.fullPath];
-        
-        pathsToToggle.forEach(path => {
-            const nodeEl = document.querySelector(`[data-path="${path}"]`);
-            if (nodeEl) {
-                nodeEl.classList.toggle('node-excluded');
-                const btn = nodeEl.querySelector('.eye-btn');
-                if (btn) {
-                    const isExcluded = nodeEl.classList.contains('node-excluded');
-                    btn.innerHTML = isExcluded
-                        ? '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1 1l14 14" stroke="currentColor" stroke-width="1.3"/></svg>'
-                        : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
-                }
-            }
-        });
         
         vscode.postMessage({ type: 'toggleExcludeMultiple', paths: pathsToToggle });
     });

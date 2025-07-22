@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('repotxt.refresh', () => core.refresh()),
         vscode.commands.registerCommand('repotxt.resetExclusions', () => core.resetExclusions()),
         vscode.commands.registerCommand('repotxt.openSettings', () => {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'repotxt');
+            vscode.commands.executeCommand('workbench.action.openSettings', '@ext:TUBIK-corp.repotxt');
         }),
         vscode.commands.registerCommand('repotxt.generateReport', async () => {
             vscode.window.withProgress({
