@@ -22,19 +22,38 @@
     padding: 0;
 }
 
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size);
     color: var(--text-primary);
     background: var(--bg-primary);
-    overflow: hidden;
     user-select: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 0;
 }
 
 .app-container {
-    height: 100vh;
     display: flex;
     flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
 }
 
 .toolbar {
@@ -44,6 +63,7 @@ body {
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     gap: 6px;
+    flex-shrink: 0;
 }
 
 .toolbar-title {
@@ -51,7 +71,7 @@ body {
     font-weight: 600;
     font-size: 11px;
     text-transform: uppercase;
-        letter-spacing: 0.5px;
+    letter-spacing: 0.5px;
     opacity: 0.8;
 }
 
@@ -124,6 +144,7 @@ body {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0;
+    height: calc(100% - 35px);
 }
 
 .tree-node {

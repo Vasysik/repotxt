@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.2.17",
+  "version": "0.2.20",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -68,6 +68,11 @@
         "command": "repotxt.resetExclusions",
         "title": "Reset Exclusions to Default",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "repotxt.openSettings",
+        "title": "Open Extension Settings",
+        "icon": "$(settings-gear)"
       }
     ],
     "menus": {
@@ -93,6 +98,11 @@
           "command": "repotxt.resetExclusions",
           "when": "view == repotxt",
           "group": "navigation@3"
+        },
+        {
+          "command": "repotxt.openSettings",
+          "when": "view == repotxt",
+          "group": "navigation@4"
         }
       ]
     },

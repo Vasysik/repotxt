@@ -39,7 +39,11 @@ export function activate(context: vscode.ExtensionContext) {
     } else {
         const webviewProvider = new RepoAnalyzerWebviewProvider(context.extensionUri, core);
         context.subscriptions.push(
-            vscode.window.registerWebviewViewProvider(RepoAnalyzerWebviewProvider.viewType, webviewProvider)
+            vscode.window.registerWebviewViewProvider(RepoAnalyzerWebviewProvider.viewType, webviewProvider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true
+                }
+            })
         );
     }
 

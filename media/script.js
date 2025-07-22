@@ -19,9 +19,8 @@ function initializeEventListeners() {
     });
 
     $('resetBtn').addEventListener('click', () => {
-        if (confirm('Reset all exclusions to default?')) {
-            vscode.postMessage({ type: 'resetExclusions' });
-        }
+        showTooltip('resetBtn', 'Resetting...');
+        vscode.postMessage({ type: 'resetExclusions' });
     });
 
     $('collapseBtn').addEventListener('click', () => {
