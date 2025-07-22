@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { RepoAnalyzerCore } from './repoAnalyzerCore';
 
 export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'repotxt.webview';
     private _view?: vscode.WebviewView;
-    private _repoAnalyzerProvider: any;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        repoAnalyzerProvider: any
+        private _core: RepoAnalyzerCore
     ) {
-        this._repoAnalyzerProvider = repoAnalyzerProvider;
+        this._core.onDidChange(() => this.updateWebview());
     }
 
     public resolveWebviewView(
@@ -30,51 +30,34 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async data => {
             switch (data.type) {
                 case 'getFileTree':
-                    const tree = await this._repoAnalyzerProvider.getWebviewData();
+                    const tree = await this._core.getWebviewData();
                     webviewView.webview.postMessage({ type: 'fileTree', data: tree });
                     break;
                 case 'toggleExclude':
-                    await this._repoAnalyzerProvider.toggleExcludeByPath(data.path);
-                    const updatedTree = await this._repoAnalyzerProvider.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: updatedTree });
+                    this._core.toggleExclude(data.path);
+                    break;
+                case 'toggleExcludeMultiple':
+                    this._core.toggleExcludeMultiple(data.paths);
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');
                     break;
                 case 'refresh':
                     vscode.commands.executeCommand('repotxt.refresh');
-                    const refreshedTree = await this._repoAnalyzerProvider.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: refreshedTree });
                     break;
                 case 'resetExclusions':
                     vscode.commands.executeCommand('repotxt.resetExclusions');
-                    const resetTree = await this._repoAnalyzerProvider.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: resetTree });
-                    break;
-                case 'excludeAll':
-                    vscode.commands.executeCommand('repotxt.excludeAll');
-                    const excludedTree = await this._repoAnalyzerProvider.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: excludedTree });
-                    break;
-                case 'includeAll':
-                    vscode.commands.executeCommand('repotxt.includeAll');
-                    const includedTree = await this._repoAnalyzerProvider.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: includedTree });
                     break;
                 case 'openFile':
                     vscode.commands.executeCommand('vscode.open', vscode.Uri.file(data.path));
                     break;
             }
         });
-
-        this._repoAnalyzerProvider.onDidChangeTreeData(() => {
-            this.updateWebview();
-        });
     }
 
     public async updateWebview() {
         if (this._view) {
-            const tree = await this._repoAnalyzerProvider.getWebviewData();
+            const tree = await this._core.getWebviewData();
             this._view.webview.postMessage({ type: 'fileTree', data: tree });
         }
     }
@@ -97,39 +80,34 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
             <div class="toolbar-title">Explorer</div>
             <div class="toolbar-actions">
                 <button class="btn-icon" id="refreshBtn">
-                    <svg viewBox="0 0 16 16" fill="none">
-                        <path d="M13.5 2.5A7 7 0 112.5 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                        <path d="M13.5 2.5v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5.56253 2.51577C3.46348 3.4501 2 5.55414 2 7.99999C2 11.3137 4.68629 14 8 14C11.3137 14 14 11.3137 14 7.99999C14 5.32519 12.2497 3.05919 9.83199 2.28482L9.52968 3.23832C11.5429 3.88454 13 5.7721 13 7.99999C13 10.7614 10.7614 13 8 13C5.23858 13 3 10.7614 3 7.99999C3 6.31104 3.83742 4.81767 5.11969 3.91245L5.56253 2.51577Z" fill="#ffffffff"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3H2V2H5.5L6 2.5V6H5V3Z" fill="#ffffffff"/>
                     </svg>
                     <span class="tooltip">Refresh</span>
                 </button>
-                <button class="btn-icon" id="excludeAllBtn">
-                    <svg viewBox="0 0 16 16" fill="none">
-                        <path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M1 1l14 14" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    <span class="tooltip">Exclude All</span>
-                </button>
-                <button class="btn-icon" id="includeAllBtn">
-                    <svg viewBox="0 0 16 16" fill="none">
-                        <path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                        <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    <span class="tooltip">Include All</span>
-                </button>
                 <button class="btn-icon primary" id="generateBtn">
-                    <svg viewBox="0 0 16 16" fill="none">
-                        <path d="M4 2v12h8V6l-2-2-2-2H4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="currentColor" fill-opacity="0.2"/>
-                        <path d="M8 2v4h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M14.5 1H1.5L1 1.5V4.5L1.5 5H2V13.5L2.5 14H13.5L14 13.5V5H14.5L15 4.5V1.5L14.5 1ZM13.5 4H2.5H2V2H14V4H13.5ZM3 13V5H13V13H3ZM11 7H5V8H11V7Z" fill="#ffffffff"/>
                     </svg>
                     <span class="tooltip">Generate Report</span>
                 </button>
                 <button class="btn-icon" id="resetBtn">
-                    <svg viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="#ffffffff"/>
+                        <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="#ffffffff"/>
+                        <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="#ffffffff"/>
+                        <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="#ffffffff"/>
+                        <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="#ffffffff"/>
                     </svg>
                     <span class="tooltip">Reset Exclusions</span>
+                </button>
+                <button class="btn-icon" id="collapseBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M9 9H4V10H9V9Z" fill="#ffffffff"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3L6 2H13L14 3V10L13 11H11V13L10 14H3L2 13V6L3 5H5V3ZM6 5H10L11 6V10H13V3H6V5ZM10 6H3V13H10V6Z" fill="#C5C5C5"/>
+                    </svg>
+                    <span class="tooltip">Collapse All</span>
                 </button>
             </div>
         </div>

@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.2.7",
+  "version": "0.2.13",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -29,16 +29,18 @@
       "repo-analyzer": [
         {
           "id": "repotxt",
-          "name": "Repository Files",
+          "name": "treeView",
           "icon": "$(output-view-icon)",
-          "contextualTitle": "Repository Files"
+          "contextualTitle": "treeView",
+          "when": "repotxt.interfaceType == 'treeview'"
         },
         {
           "type": "webview",
           "id": "repotxt.webview",
-          "name": "Repository Analyzer",
+          "name": "webView",
           "icon": "$(output-view-icon)",
-          "contextualTitle": "Repository Analyzer"
+          "contextualTitle": "webView",
+          "when": "repotxt.interfaceType == 'webview'"
         }
       ]
     },
@@ -47,6 +49,10 @@
         "command": "repotxt.toggleExclude",
         "title": "Toggle Exclude",
         "icon": "$(eye)"
+      },
+      {
+        "command": "repotxt.toggleExcludeMultiple",
+        "title": "Toggle Exclude Multiple"
       },
       {
         "command": "repotxt.generateReport",
@@ -62,16 +68,6 @@
         "command": "repotxt.resetExclusions",
         "title": "Reset Exclusions to Default",
         "icon": "$(clear-all)"
-      },
-      {
-        "command": "repotxt.excludeAll",
-        "title": "Exclude All Files",
-        "icon": "$(eye-closed)"
-      },
-      {
-        "command": "repotxt.includeAll",
-        "title": "Include All Files",
-        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -94,25 +90,25 @@
           "group": "navigation@2"
         },
         {
-          "command": "repotxt.excludeAll",
-          "when": "view == repotxt",
-          "group": "navigation@3"
-        },
-        {
-          "command": "repotxt.includeAll",
-          "when": "view == repotxt",
-          "group": "navigation@4"
-        },
-        {
           "command": "repotxt.resetExclusions",
           "when": "view == repotxt",
-          "group": "navigation@5"
+          "group": "navigation@3"
         }
       ]
     },
     "configuration": {
       "title": "Repository Analyzer",
       "properties": {
+        "repotxt.interfaceType": {
+          "type": "string",
+          "default": "webview",
+          "enum": ["treeview", "webview"],
+          "enumDescriptions": [
+            "Traditional VS Code tree view interface",
+            "Modern web-based interface with advanced selection"
+          ],
+          "description": "Choose the interface type for Repository Analyzer"
+        },
         "repotxt.autoExcludeEnabled": {
           "type": "boolean",
           "default": true,

@@ -12,6 +12,8 @@
     --button-hover: var(--vscode-button-hoverBackground);
     --excluded: var(--vscode-disabledForeground);
     --tree-indent: 20px;
+    --selection-bg: var(--vscode-list-activeSelectionBackground);
+    --selection-inactive-bg: var(--vscode-list-inactiveSelectionBackground);
 }
 
 * {
@@ -38,10 +40,10 @@ body {
 .toolbar {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 6px 8px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
-    gap: 8px;
+    gap: 6px;
 }
 
 .toolbar-title {
@@ -59,8 +61,8 @@ body {
 }
 
 .btn-icon {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -71,7 +73,7 @@ body {
     justify-content: center;
     position: relative;
     transition: all 0.15s ease;
-    padding: 4px;
+    padding: 3px;
 }
 
 .btn-icon:hover {
@@ -142,7 +144,11 @@ body {
 }
 
 .node-content.selected {
-    background: var(--bg-active);
+    background: var(--selection-bg);
+}
+
+.node-content.multi-selected {
+    background: var(--selection-inactive-bg);
 }
 
 .node-arrow {
@@ -207,7 +213,9 @@ body {
     transition: opacity 0.15s;
 }
 
-.node-content:hover .node-actions {
+.node-content:hover .node-actions,
+.node-content.selected .node-actions,
+.node-content.multi-selected .node-actions {
     opacity: 1;
 }
 

@@ -1,7 +1,10 @@
 const vscode = acquireVsCodeApi();
 let fileTreeData = null;
 let expandedNodes = new Set();
-let selectedNode = null;
+let selectedNodes = new Set();
+let lastSelectedNode = null;
+let allNodePaths = [];
+let renderTimeout = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,17 +24,23 @@ function initializeEventListeners() {
         }
     });
 
-    $('excludeAllBtn').addEventListener('click', () => {
-        if (confirm('Exclude all files from analysis?')) {
-            vscode.postMessage({ type: 'excludeAll' });
-        }
+    $('collapseBtn').addEventListener('click', () => {
+        expandedNodes.clear();
+        renderFileTree();
+        showTooltip('collapseBtn', 'Collapsed all');
     });
 
-    $('includeAllBtn').addEventListener('click', () => {
-        if (confirm('Include all files in analysis?')) {
-            vscode.postMessage({ type: 'includeAll' });
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'a') {
+            e.preventDefault();
+            selectAll();
         }
     });
+}
+
+function selectAll() {
+    selectedNodes = new Set(allNodePaths);
+    renderFileTree();
 }
 
 function showTooltip(btnId, text) {
@@ -48,9 +57,28 @@ window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
         fileTreeData = message.data;
-        renderFileTree();
+        debouncedRender();
     }
 });
+
+function debouncedRender() {
+    if (renderTimeout) {
+        clearTimeout(renderTimeout);
+    }
+    renderTimeout = setTimeout(() => {
+        renderFileTree();
+    }, 50);
+}
+
+function collectAllPaths(nodes, paths = []) {
+    nodes.forEach(node => {
+        paths.push(node.fullPath);
+        if (node.children && node.children.length > 0) {
+            collectAllPaths(node.children, paths);
+        }
+    });
+    return paths;
+}
 
 function renderFileTree() {
     const container = $('fileTree');
@@ -65,10 +93,27 @@ function renderFileTree() {
         return;
     }
 
-    container.innerHTML = '';
+    allNodePaths = collectAllPaths(fileTreeData);
+    
+    const fragment = document.createDocumentFragment();
     fileTreeData.forEach(node => {
-        container.appendChild(createTreeNode(node, 0, ''));
+        fragment.appendChild(createTreeNode(node, 0, ''));
     });
+    
+    container.innerHTML = '';
+    container.appendChild(fragment);
+}
+
+function getNodesBetween(startPath, endPath) {
+    const startIndex = allNodePaths.indexOf(startPath);
+    const endIndex = allNodePaths.indexOf(endPath);
+    
+    if (startIndex === -1 || endIndex === -1) return [];
+    
+    const from = Math.min(startIndex, endIndex);
+    const to = Math.max(startIndex, endIndex);
+    
+    return allNodePaths.slice(from, to + 1);
 }
 
 function createTreeNode(node, level, parentPath) {
@@ -79,6 +124,11 @@ function createTreeNode(node, level, parentPath) {
 
     const content = document.createElement('div');
     content.className = 'node-content';
+    
+    if (selectedNodes.has(node.fullPath)) {
+        content.classList.add(selectedNodes.size === 1 ? 'selected' : 'multi-selected');
+    }
+    
     content.style.paddingLeft = `${level * 20 + 8}px`;
 
     if (node.isDirectory && node.children && node.children.length > 0) {
@@ -127,7 +177,10 @@ function createTreeNode(node, level, parentPath) {
 
     eyeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        vscode.postMessage({ type: 'toggleExclude', path: node.fullPath });
+        const pathsToToggle = selectedNodes.has(node.fullPath) 
+            ? Array.from(selectedNodes) 
+            : [node.fullPath];
+        vscode.postMessage({ type: 'toggleExcludeMultiple', paths: pathsToToggle });
     });
 
     actions.appendChild(eyeBtn);
@@ -136,16 +189,32 @@ function createTreeNode(node, level, parentPath) {
     content.appendChild(name);
     content.appendChild(actions);
 
-    content.addEventListener('click', () => {
-        if (selectedNode) {
-            selectedNode.classList.remove('selected');
+    content.addEventListener('click', (e) => {
+        const ctrlPressed = e.ctrlKey || e.metaKey;
+        const shiftPressed = e.shiftKey;
+        
+        if (!ctrlPressed && !shiftPressed) {
+            selectedNodes.clear();
+            selectedNodes.add(node.fullPath);
+            lastSelectedNode = node.fullPath;
+        } else if (ctrlPressed && !shiftPressed) {
+            if (selectedNodes.has(node.fullPath)) {
+                selectedNodes.delete(node.fullPath);
+            } else {
+                selectedNodes.add(node.fullPath);
+            }
+            lastSelectedNode = node.fullPath;
+        } else if (shiftPressed && lastSelectedNode) {
+            selectedNodes.clear();
+            const nodesToSelect = getNodesBetween(lastSelectedNode, node.fullPath);
+            nodesToSelect.forEach(path => selectedNodes.add(path));
         }
-        content.classList.add('selected');
-        selectedNode = content;
+        
+        renderFileTree();
 
-        if (!node.isDirectory) {
+        if (!node.isDirectory && !ctrlPressed && !shiftPressed) {
             vscode.postMessage({ type: 'openFile', path: node.fullPath });
-        } else if (node.children && node.children.length > 0) {
+        } else if (node.isDirectory && node.children && node.children.length > 0 && !ctrlPressed && !shiftPressed) {
             toggleNode(nodeId);
         }
     });
