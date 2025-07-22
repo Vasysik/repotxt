@@ -46,6 +46,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('repotxt.refresh', () => core.refresh()),
         vscode.commands.registerCommand('repotxt.resetExclusions', () => core.resetExclusions()),
+        vscode.commands.registerCommand('repotxt.openSettings', () => {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'repotxt');
+        }),
         vscode.commands.registerCommand('repotxt.generateReport', async () => {
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,

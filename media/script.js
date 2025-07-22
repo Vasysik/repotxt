@@ -30,6 +30,10 @@ function initializeEventListeners() {
         showTooltip('collapseBtn', 'Collapsed all');
     });
 
+    $('settingsBtn').addEventListener('click', () => {
+        vscode.postMessage({ type: 'openSettings' });
+    });
+
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === 'a') {
             e.preventDefault();
@@ -134,8 +138,10 @@ function createTreeNode(node, level, parentPath) {
     if (node.isDirectory && node.children && node.children.length > 0) {
         const arrow = document.createElement('div');
         arrow.className = 'node-arrow';
-        arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(nodeId) ? 'expanded' : ''}" viewBox="0 0 16 16">
-            <path d="M5 6l3 3-3 3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(nodeId) ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            ${expandedNodes.has(nodeId) 
+                ? '<path fill-rule="evenodd" clip-rule="evenodd" d="M7.97612 10.0719L12.3334 5.7146L12.9521 6.33332L8.28548 11L7.66676 11L3.0001 6.33332L3.61882 5.7146L7.97612 10.0719Z" fill="currentColor"/>'
+                : '<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0719 8.02397L5.7146 3.66666L6.33332 3.04794L11 7.71461V8.33333L6.33332 13L5.7146 12.3813L10.0719 8.02397Z" fill="currentColor"/>'}
         </svg>`;
 
         arrow.addEventListener('click', (e) => {
@@ -180,6 +186,21 @@ function createTreeNode(node, level, parentPath) {
         const pathsToToggle = selectedNodes.has(node.fullPath) 
             ? Array.from(selectedNodes) 
             : [node.fullPath];
+        
+        pathsToToggle.forEach(path => {
+            const nodeEl = document.querySelector(`[data-path="${path}"]`);
+            if (nodeEl) {
+                nodeEl.classList.toggle('node-excluded');
+                const btn = nodeEl.querySelector('.eye-btn');
+                if (btn) {
+                    const isExcluded = nodeEl.classList.contains('node-excluded');
+                    btn.innerHTML = isExcluded
+                        ? '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1 1l14 14" stroke="currentColor" stroke-width="1.3"/></svg>'
+                        : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+                }
+            }
+        });
+        
         vscode.postMessage({ type: 'toggleExcludeMultiple', paths: pathsToToggle });
     });
 

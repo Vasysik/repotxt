@@ -51,7 +51,7 @@ body {
     font-weight: 600;
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+        letter-spacing: 0.5px;
     opacity: 0.8;
 }
 
@@ -163,11 +163,11 @@ body {
 .arrow-icon {
     width: 16px;
     height: 16px;
-    transition: transform 0.15s ease;
+    transition: none;
 }
 
 .arrow-icon.expanded {
-    transform: rotate(90deg);
+    transform: none;
 }
 
 .node-icon {
@@ -230,12 +230,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: opacity 0.15s;
     padding: 2px;
 }
 
 .eye-btn:hover {
-    background: var(--bg-active);
     color: var(--text-primary);
 }
 
