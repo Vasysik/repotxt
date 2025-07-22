@@ -81,31 +81,31 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
             <div class="toolbar-actions">
                 <button class="btn-icon" id="refreshBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5.56253 2.51577C3.46348 3.4501 2 5.55414 2 7.99999C2 11.3137 4.68629 14 8 14C11.3137 14 14 11.3137 14 7.99999C14 5.32519 12.2497 3.05919 9.83199 2.28482L9.52968 3.23832C11.5429 3.88454 13 5.7721 13 7.99999C13 10.7614 10.7614 13 8 13C5.23858 13 3 10.7614 3 7.99999C3 6.31104 3.83742 4.81767 5.11969 3.91245L5.56253 2.51577Z" fill="#ffffffff"/>
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3H2V2H5.5L6 2.5V6H5V3Z" fill="#ffffffff"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5.56253 2.51577C3.46348 3.4501 2 5.55414 2 7.99999C2 11.3137 4.68629 14 8 14C11.3137 14 14 11.3137 14 7.99999C14 5.32519 12.2497 3.05919 9.83199 2.28482L9.52968 3.23832C11.5429 3.88454 13 5.7721 13 7.99999C13 10.7614 10.7614 13 8 13C5.23858 13 3 10.7614 3 7.99999C3 6.31104 3.83742 4.81767 5.11969 3.91245L5.56253 2.51577Z" fill="currentColor"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3H2V2H5.5L6 2.5V6H5V3Z" fill="currentColor"/>
                     </svg>
                     <span class="tooltip">Refresh</span>
                 </button>
                 <button class="btn-icon primary" id="generateBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M14.5 1H1.5L1 1.5V4.5L1.5 5H2V13.5L2.5 14H13.5L14 13.5V5H14.5L15 4.5V1.5L14.5 1ZM13.5 4H2.5H2V2H14V4H13.5ZM3 13V5H13V13H3ZM11 7H5V8H11V7Z" fill="#ffffffff"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M14.5 1H1.5L1 1.5V4.5L1.5 5H2V13.5L2.5 14H13.5L14 13.5V5H14.5L15 4.5V1.5L14.5 1ZM13.5 4H2.5H2V2H14V4H13.5ZM3 13V5H13V13H3ZM11 7H5V8H11V7Z" fill="currentColor"/>
                     </svg>
                     <span class="tooltip">Generate Report</span>
                 </button>
                 <button class="btn-icon" id="resetBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="#ffffffff"/>
-                        <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="#ffffffff"/>
-                        <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="#ffffffff"/>
-                        <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="#ffffffff"/>
-                        <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="#ffffffff"/>
+                        <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="currentColor"/>
+                        <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="currentColor"/>
+                        <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="currentColor"/>
+                        <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="currentColor"/>
+                        <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="currentColor"/>
                     </svg>
                     <span class="tooltip">Reset Exclusions</span>
                 </button>
                 <button class="btn-icon" id="collapseBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M9 9H4V10H9V9Z" fill="#ffffffff"/>
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3L6 2H13L14 3V10L13 11H11V13L10 14H3L2 13V6L3 5H5V3ZM6 5H10L11 6V10H13V3H6V5ZM10 6H3V13H10V6Z" fill="#C5C5C5"/>
+                        <path d="M9 9H4V10H9V9Z" fill="currentColor"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 3L6 2H13L14 3V10L13 11H11V13L10 14H3L2 13V6L3 5H5V3ZM6 5H10L11 6V10H13V3H6V5ZM10 6H3V13H10V6Z" fill="currentColor"/>
                     </svg>
                     <span class="tooltip">Collapse All</span>
                 </button>
