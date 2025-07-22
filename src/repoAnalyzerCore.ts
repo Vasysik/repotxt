@@ -318,33 +318,42 @@ export class RepoAnalyzerCore {
 
     async getWebviewData(): Promise<any[]> {
         if (!this.workspaceRoot) return [];
-        return this.getWebviewFileTree(this.workspaceRoot);
+        return this.getWebviewFileTree(this.workspaceRoot, 0, 1);
+    }
+
+    async loadFolderContent(folderPath: string): Promise<any[]> {
+        if (!this.workspaceRoot || !fs.existsSync(folderPath)) return [];
+        return this.getWebviewFileTree(folderPath, 0, 1);
     }
 
     private async getWebviewFileTree(directoryPath: string, depth: number = 0, maxDepth: number = 10): Promise<any[]> {
         if (depth > maxDepth) return [];
         
         try {
-            const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
-                .sort((a, b) => {
-                    const aIsDir = a.isDirectory() ? 0 : 1;
-                    const bIsDir = b.isDirectory() ? 0 : 1;
-                    return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
-                });
+            const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+            const sortedEntries = entries.sort((a, b) => {
+                const aIsDir = a.isDirectory() ? 0 : 1;
+                const bIsDir = b.isDirectory() ? 0 : 1;
+                return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
+            });
 
             const result = [];
-            for (const entry of entries) {
+            for (const entry of sortedEntries) {
                 const fullPath = path.join(directoryPath, entry.name);
                 const isExcluded = this.isPathVisuallyExcluded(fullPath);
+                
+                const hasChildren = entry.isDirectory() && await this.hasNonExcludedChildren(fullPath);
+                
                 const item: any = {
                     name: entry.name,
                     fullPath: fullPath,
                     isDirectory: entry.isDirectory(),
                     excluded: isExcluded,
+                    hasChildren: hasChildren,
                     children: []
                 };
 
-                if (entry.isDirectory() && depth < maxDepth) {
+                if (entry.isDirectory() && depth < maxDepth && depth === 0) {
                     item.children = await this.getWebviewFileTree(fullPath, depth + 1, maxDepth);
                 }
 
@@ -353,6 +362,21 @@ export class RepoAnalyzerCore {
             return result;
         } catch (error) {
             return [];
+        }
+    }
+
+    private async hasNonExcludedChildren(dirPath: string): Promise<boolean> {
+        try {
+            const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.join(dirPath, entry.name);
+                if (!this.isPathVisuallyExcluded(fullPath)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch {
+            return false;
         }
     }
 

@@ -33,6 +33,14 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     const tree = await this._core.getWebviewData();
                     webviewView.webview.postMessage({ type: 'fileTree', data: tree });
                     break;
+                case 'loadFolder':
+                    const folderData = await this._core.loadFolderContent(data.path);
+                    webviewView.webview.postMessage({ 
+                        type: 'folderContent', 
+                        nodeId: data.nodeId,
+                        children: folderData 
+                    });
+                    break;
                 case 'toggleExclude':
                     this._core.toggleExclude(data.path);
                     break;
