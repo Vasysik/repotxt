@@ -7,6 +7,7 @@ let allNodePaths = [];
 let renderTimeout = null;
 let fileStructureCache = new Map();
 let nodeStateCache = new Map();
+let isInitialLoad = true;
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,8 +69,11 @@ function showTooltip(btnId, text) {
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
+        const isFirstLoad = fileTreeData === null;
         fileTreeData = message.data;
-        clearAllCaches();
+        if (isFirstLoad) {
+            clearAllCaches();
+        }
         debouncedRender();
     } else if (message.type === 'children') {
         const structureOnly = message.data.map(node => ({
@@ -96,11 +100,13 @@ window.addEventListener('message', event => {
         }
         
         updateNodeChildren(fileTreeData, message.path, message.data);
-        debouncedRender();
+        renderFileTree();
     } else if (message.type === 'nodeStates') {
         updateNodeStates(message.states);
     } else if (message.type === 'fullRefresh') {
+        fileTreeData = null;
         clearAllCaches();
+        isInitialLoad = true;
         vscode.postMessage({ type: 'getFileTree' });
     }
 });
@@ -153,17 +159,26 @@ function renderFileTree() {
     const container = $('fileTree');
 
     if (!fileTreeData || fileTreeData.length === 0) {
-        container.innerHTML = `<div class="empty-state">
-            <svg class="empty-icon" viewBox="0 0 24 24" fill="none">
-                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            <div>No workspace folder open</div>
-        </div>`;
+        if (isInitialLoad) {
+            container.innerHTML = `<div class="loading-container">
+                <div class="spinner"></div>
+                <div class="loading-text">Loading repository...</div>
+            </div>`;
+        } else {
+            container.innerHTML = `<div class="empty-state">
+                <svg class="empty-icon" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+                <div>No workspace folder open</div>
+            </div>`;
+        }
         return;
     }
 
+    isInitialLoad = false;
     allNodePaths = collectAllPaths(fileTreeData);
     
+    const scrollTop = container.scrollTop;
     const fragment = document.createDocumentFragment();
     fileTreeData.forEach(node => {
         fragment.appendChild(createTreeNode(node, 0, ''));
@@ -171,6 +186,7 @@ function renderFileTree() {
     
     container.innerHTML = '';
     container.appendChild(fragment);
+    container.scrollTop = scrollTop;
 }
 
 function getNodesBetween(startPath, endPath) {
