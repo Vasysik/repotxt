@@ -11,10 +11,12 @@ export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
     
     selectionDecoration = vscode.window.createTextEditorDecorationType({
-        backgroundColor: new vscode.ThemeColor('editor.selectionBackground'),
-        isWholeLine: false,
-        overviewRulerColor: new vscode.ThemeColor('editor.selectionHighlightBorder'),
-        overviewRulerLane: vscode.OverviewRulerLane.Center
+        isWholeLine: true,
+        overviewRulerColor: new vscode.ThemeColor('gitDecoration.stageModifiedResourceForeground'),
+        overviewRulerLane: vscode.OverviewRulerLane.Left,
+        borderWidth: '0 0 0 2px',
+        borderStyle: 'solid',
+        borderColor: new vscode.ThemeColor('gitDecoration.stageModifiedResourceForeground'),
     });
     
     const config = vscode.workspace.getConfiguration('repotxt');
@@ -116,21 +118,33 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('repotxt.clearSelections', (filePath?: string) => {
             if (filePath) {
-                core.clearRanges(filePath);
                 const editor = vscode.window.activeTextEditor;
-                if (editor && editor.document.uri.fsPath === filePath) {
+                if (editor && editor.document.uri.fsPath === filePath && editor.selections.some(s => !s.isEmpty)) {
+                    core.removeRanges(filePath, editor.selections.filter(s => !s.isEmpty));
                     updateEditorDecorations(editor);
+                    vscode.window.showInformationMessage('Removed selection from report');
+                } else {
+                    core.clearRanges(filePath);
+                    if (editor && editor.document.uri.fsPath === filePath) {
+                        updateEditorDecorations(editor);
+                    }
+                    vscode.window.showInformationMessage('Cleared all selections for file');
                 }
-                vscode.window.showInformationMessage('Cleared selections for file');
             } else {
                 const editor = vscode.window.activeTextEditor;
                 if (!editor) {
                     vscode.window.showWarningMessage('No active editor');
                     return;
                 }
-                core.clearRanges(editor.document.uri.fsPath);
-                updateEditorDecorations(editor);
-                vscode.window.showInformationMessage('Cleared selections for current file');
+                if (editor.selections.some(s => !s.isEmpty)) {
+                    core.removeRanges(editor.document.uri.fsPath, editor.selections.filter(s => !s.isEmpty));
+                    updateEditorDecorations(editor);
+                    vscode.window.showInformationMessage('Removed selection from report');
+                } else {
+                    core.clearRanges(editor.document.uri.fsPath);
+                    updateEditorDecorations(editor);
+                    vscode.window.showInformationMessage('Cleared all selections for file');
+                }
             }
         }),
         vscode.commands.registerCommand('repotxt.clearAllSelections', () => {

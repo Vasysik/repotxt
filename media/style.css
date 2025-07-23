@@ -285,8 +285,8 @@ body {
 }
 
 .clear-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
 }
 
 .node-children {
@@ -342,7 +342,11 @@ body {
 
 .partial-badge {
     margin-left: 4px;
-    font-size: 10px;
+}
+
+.partial-badge svg {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
     color: var(--vscode-editorInfo-foreground, #00AFFF);
-    font-weight: bold;
 }

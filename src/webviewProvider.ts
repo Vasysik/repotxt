@@ -64,6 +64,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'clearSelections':
                     this._core.clearRanges(data.path);
+                    this.updateWebview();
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');

@@ -409,6 +409,33 @@ export class RepoAnalyzerCore {
         this.refresh();
     }
 
+    removeRanges(filePath: string, selections: readonly vscode.Selection[]): void {
+        const existingRanges = this.partialIncludes.get(filePath);
+        if (!existingRanges || existingRanges.length === 0) return;
+        
+        const selectionsAsRanges: Range[] = selections.map(sel => ({
+            start: sel.start.line + 1,
+            end: sel.end.line + 1
+        }));
+        
+        const remainingRanges = existingRanges.filter(existingRange => {
+            return !selectionsAsRanges.some(selRange => 
+                (existingRange.start >= selRange.start && existingRange.start <= selRange.end) ||
+                (existingRange.end >= selRange.start && existingRange.end <= selRange.end) ||
+                (existingRange.start <= selRange.start && existingRange.end >= selRange.end)
+            );
+        });
+        
+        if (remainingRanges.length === 0) {
+            this.partialIncludes.delete(filePath);
+        } else {
+            this.partialIncludes.set(filePath, remainingRanges);
+        }
+        
+        this.saveState();
+        this.refresh();
+    }
+
     clearRanges(filePath: string): void {
         this.partialIncludes.delete(filePath);
         this.saveState();
