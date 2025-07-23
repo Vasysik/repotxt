@@ -8,6 +8,8 @@ let renderTimeout = null;
 let fileStructureCache = new Map();
 let nodeStateCache = new Map();
 let isInitialLoad = true;
+let domMap = new Map();
+let isFirstRender = true;
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,7 +32,7 @@ function initializeEventListeners() {
 
     $('collapseBtn').addEventListener('click', () => {
         expandedNodes.clear();
-        renderFileTree();
+        updateExpandedStates();
         showTooltip('collapseBtn', 'Collapsed all');
     });
 
@@ -49,11 +51,13 @@ function initializeEventListeners() {
 function clearAllCaches() {
     fileStructureCache.clear();
     nodeStateCache.clear();
+    domMap.clear();
+    isFirstRender = true;
 }
 
 function selectAll() {
     selectedNodes = new Set(allNodePaths);
-    renderFileTree();
+    updateSelectionStates();
 }
 
 function showTooltip(btnId, text) {
@@ -100,7 +104,7 @@ window.addEventListener('message', event => {
         }
         
         updateNodeChildren(fileTreeData, message.path, message.data);
-        renderFileTree();
+        renderChildren(message.path, message.data);
     } else if (message.type === 'nodeStates') {
         updateNodeStates(message.states);
     } else if (message.type === 'fullRefresh') {
@@ -116,6 +120,10 @@ function updateNodeStates(states) {
     
     stateMap.forEach((excluded, path) => {
         nodeStateCache.set(path, excluded);
+        const nodeEl = domMap.get(path);
+        if (nodeEl) {
+            updateNodeExcludedState(nodeEl, excluded);
+        }
     });
     
     function updateStates(nodes) {
@@ -132,7 +140,62 @@ function updateNodeStates(states) {
     
     if (fileTreeData) {
         updateStates(fileTreeData);
-        renderFileTree();
+    }
+}
+
+function updateNodeExcludedState(nodeContent, isExcluded) {
+    const treeNode = nodeContent.parentElement;
+    if (isExcluded) {
+        treeNode.classList.add('node-excluded');
+    } else {
+        treeNode.classList.remove('node-excluded');
+    }
+    
+    const eyeBtn = nodeContent.querySelector('.eye-btn');
+    if (eyeBtn) {
+        eyeBtn.innerHTML = isExcluded 
+            ? '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1 1l14 14" stroke="currentColor" stroke-width="1.3"/></svg>'
+            : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+    }
+}
+
+function updateSelectionStates() {
+    domMap.forEach((nodeContent, path) => {
+        if (selectedNodes.has(path)) {
+            nodeContent.classList.add(selectedNodes.size === 1 ? 'selected' : 'multi-selected');
+            nodeContent.classList.remove(selectedNodes.size === 1 ? 'multi-selected' : 'selected');
+        } else {
+            nodeContent.classList.remove('selected', 'multi-selected');
+        }
+    });
+}
+
+function updateExpandedStates() {
+    domMap.forEach((nodeContent, path) => {
+        const nodeElement = nodeContent.parentElement;
+        const childrenContainer = nodeElement.querySelector('.node-children');
+        const arrow = nodeContent.querySelector('.arrow-icon');
+        
+        if (childrenContainer && arrow) {
+            if (expandedNodes.has(path)) {
+                childrenContainer.classList.add('expanded');
+                arrow.classList.add('expanded');
+                updateFolderIcon(nodeContent, true);
+            } else {
+                childrenContainer.classList.remove('expanded');
+                arrow.classList.remove('expanded');
+                updateFolderIcon(nodeContent, false);
+            }
+        }
+    });
+}
+
+function updateFolderIcon(nodeContent, isExpanded) {
+    const icon = nodeContent.querySelector('.folder-icon');
+    if (icon) {
+        icon.innerHTML = isExpanded 
+            ? '<svg viewBox="0 0 16 16"><path d="M1.5 3v10a.5.5 0 00.5.5h12a.5.5 0 00.5-.5V6.5a.5.5 0 00-.5-.5h-6l-1.5-1.5h-5a.5.5 0 00-.5.5z" fill="currentColor"/></svg>'
+            : '<svg viewBox="0 0 16 16"><path d="M1.5 3v10a.5.5 0 00.5.5h12a.5.5 0 00.5-.5V5.5a.5.5 0 00-.5-.5h-6l-1-1.5h-5a.5.5 0 00-.5.5z" fill="currentColor"/></svg>';
     }
 }
 
@@ -178,15 +241,44 @@ function renderFileTree() {
     isInitialLoad = false;
     allNodePaths = collectAllPaths(fileTreeData);
     
-    const scrollTop = container.scrollTop;
-    const fragment = document.createDocumentFragment();
-    fileTreeData.forEach(node => {
-        fragment.appendChild(createTreeNode(node, 0, ''));
-    });
+    if (isFirstRender) {
+        container.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        fileTreeData.forEach(node => {
+            fragment.appendChild(createTreeNode(node, 0, ''));
+        });
+        container.appendChild(fragment);
+        isFirstRender = false;
+    } else {
+        updateSelectionStates();
+        updateExpandedStates();
+    }
+}
+
+function renderChildren(parentPath, children) {
+    const parentContent = domMap.get(parentPath);
+    if (!parentContent) return;
     
-    container.innerHTML = '';
-    container.appendChild(fragment);
-    container.scrollTop = scrollTop;
+    const parentLevel = parseInt(parentContent.dataset.level, 10) || 0;
+    
+    const parentElement = parentContent.parentElement;
+    let childrenContainer = parentElement.querySelector('.node-children');
+    
+    if (!childrenContainer) {
+        childrenContainer = document.createElement('div');
+        childrenContainer.className = 'node-children expanded';
+        parentElement.appendChild(childrenContainer);
+    }
+    
+    childrenContainer.innerHTML = '';
+    
+    const fragment = document.createDocumentFragment();
+    children.forEach(child => {
+        fragment.appendChild(createTreeNode(child, parentLevel + 1, parentPath));
+    });
+    childrenContainer.appendChild(fragment);
+    
+    expandedNodes.add(parentPath);
 }
 
 function getNodesBetween(startPath, endPath) {
@@ -226,7 +318,6 @@ function getAllDescendantPaths(node) {
 }
 
 function createTreeNode(node, level, parentPath) {
-    const nodeId = parentPath ? `${parentPath}/${node.name}` : node.name;
     const nodeElement = document.createElement('div');
     
     const isExcluded = nodeStateCache.has(node.fullPath) ? nodeStateCache.get(node.fullPath) : node.excluded;
@@ -237,6 +328,7 @@ function createTreeNode(node, level, parentPath) {
 
     const content = document.createElement('div');
     content.className = 'node-content';
+    content.dataset.level = level;
     
     if (selectedNodes.has(node.fullPath)) {
         content.classList.add(selectedNodes.size === 1 ? 'selected' : 'multi-selected');
@@ -249,15 +341,15 @@ function createTreeNode(node, level, parentPath) {
     if (hasChildren) {
         const arrow = document.createElement('div');
         arrow.className = 'node-arrow';
-        arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(nodeId) ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            ${expandedNodes.has(nodeId) 
+        arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(node.fullPath) ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            ${expandedNodes.has(node.fullPath) 
                 ? '<path fill-rule="evenodd" clip-rule="evenodd" d="M7.97612 10.0719L12.3334 5.7146L12.9521 6.33332L8.28548 11L7.66676 11L3.0001 6.33332L3.61882 5.7146L7.97612 10.0719Z" fill="currentColor"/>'
                 : '<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0719 8.02397L5.7146 3.66666L6.33332 3.04794L11 7.71461V8.33333L6.33332 13L5.7146 12.3813L10.0719 8.02397Z" fill="currentColor"/>'}
         </svg>`;
 
         arrow.addEventListener('click', async (e) => {
             e.stopPropagation();
-            await toggleNode(nodeId, node);
+            await toggleNode(node.fullPath, node);
         });
 
         content.appendChild(arrow);
@@ -271,7 +363,7 @@ function createTreeNode(node, level, parentPath) {
     icon.className = 'node-icon ' + (node.isDirectory ? 'folder-icon' : 'file-icon');
     
     if (node.isDirectory) {
-        const isExpanded = expandedNodes.has(nodeId);
+        const isExpanded = expandedNodes.has(node.fullPath);
         icon.innerHTML = isExpanded 
             ? '<svg viewBox="0 0 16 16"><path d="M1.5 3v10a.5.5 0 00.5.5h12a.5.5 0 00.5-.5V6.5a.5.5 0 00-.5-.5h-6l-1.5-1.5h-5a.5.5 0 00-.5.5z" fill="currentColor"/></svg>'
             : '<svg viewBox="0 0 16 16"><path d="M1.5 3v10a.5.5 0 00.5.5h12a.5.5 0 00.5-.5V5.5a.5.5 0 00-.5-.5h-6l-1-1.5h-5a.5.5 0 00-.5.5z" fill="currentColor"/></svg>';
@@ -337,18 +429,19 @@ function createTreeNode(node, level, parentPath) {
             nodesToSelect.forEach(path => selectedNodes.add(path));
         }
         
-        renderFileTree();
+        updateSelectionStates();
 
         if (!node.isDirectory && !ctrlPressed && !shiftPressed) {
             vscode.postMessage({ type: 'openFile', path: node.fullPath });
         } else if (node.isDirectory && hasChildren && !ctrlPressed && !shiftPressed) {
-            await toggleNode(nodeId, node);
+            await toggleNode(node.fullPath, node);
         }
     });
 
+    domMap.set(node.fullPath, content);
     nodeElement.appendChild(content);
 
-    if (node.isDirectory && expandedNodes.has(nodeId)) {
+    if (node.isDirectory && expandedNodes.has(node.fullPath)) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'node-children expanded';
 
@@ -361,10 +454,10 @@ function createTreeNode(node, level, parentPath) {
             loadingEl.style.opacity = '0.6';
             loadingEl.innerHTML = '<span style="font-size: 11px;">Loading...</span>';
             childrenContainer.appendChild(loadingEl);
-            loadChildren(node, nodeId);
+            loadChildren(node, node.fullPath);
         } else if (node.children && node.children.length > 0) {
             node.children.forEach(child => {
-                childrenContainer.appendChild(createTreeNode(child, level + 1, nodeId));
+                childrenContainer.appendChild(createTreeNode(child, level + 1, node.fullPath));
             });
         }
 
@@ -400,16 +493,43 @@ function clearCacheForPath(path) {
     });
 }
 
-async function toggleNode(nodeId, node) {
-    if (expandedNodes.has(nodeId)) {
-        expandedNodes.delete(nodeId);
+async function toggleNode(fullPath, node) {
+    const nodeContent = domMap.get(fullPath);
+    if (!nodeContent) return;
+    
+    const nodeElement = nodeContent.parentElement;
+    
+    if (expandedNodes.has(fullPath)) {
+        expandedNodes.delete(fullPath);
     } else {
-        expandedNodes.add(nodeId);
-        if (node && node.children === null) {
-            await loadChildren(node, nodeId);
+        expandedNodes.add(fullPath);
+        
+        let childrenContainer = nodeElement.querySelector('.node-children');
+        if (!childrenContainer && node.isDirectory) {
+            childrenContainer = document.createElement('div');
+            childrenContainer.className = 'node-children expanded';
+            nodeElement.appendChild(childrenContainer);
+            
+            if (node.children === null) {
+                const level = parseInt(nodeContent.dataset.level, 10) || 0;
+                const loadingEl = document.createElement('div');
+                loadingEl.style.paddingLeft = `${(level + 1) * 20 + 8}px`;
+                loadingEl.style.height = '22px';
+                loadingEl.style.display = 'flex';
+                loadingEl.style.alignItems = 'center';
+                loadingEl.style.opacity = '0.6';
+                loadingEl.innerHTML = '<span style="font-size: 11px;">Loading...</span>';
+                childrenContainer.appendChild(loadingEl);
+                await loadChildren(node, fullPath);
+            }
+        }
+        
+        if (childrenContainer) {
+            childrenContainer.classList.add('expanded');
         }
     }
-    renderFileTree();
+    
+    updateExpandedStates();
 }
 
 initializeEventListeners();
