@@ -5,14 +5,14 @@ let selectedNodes = new Set();
 let lastSelectedNode = null;
 let allNodePaths = [];
 let renderTimeout = null;
-let loadedChildren = new Map();
+let fileStructureCache = new Map();
 
 const $ = (id) => document.getElementById(id);
 
 function initializeEventListeners() {
     $('refreshBtn').addEventListener('click', () => {
         showTooltip('refreshBtn', 'Refreshing...');
-        loadedChildren.clear();
+        fileStructureCache.clear();
         vscode.postMessage({ type: 'refresh' });
     });
 
@@ -22,7 +22,7 @@ function initializeEventListeners() {
 
     $('resetBtn').addEventListener('click', () => {
         showTooltip('resetBtn', 'Resetting...');
-        loadedChildren.clear();
+        fileStructureCache.clear();
         vscode.postMessage({ type: 'resetExclusions' });
     });
 
@@ -59,45 +59,19 @@ function showTooltip(btnId, text) {
     }, 1500);
 }
 
-function mergeTreeData(newData, oldData) {
-    const oldDataMap = new Map();
-    
-    function buildMap(nodes) {
-        nodes.forEach(node => {
-            oldDataMap.set(node.fullPath, node);
-            if (node.children && node.children.length > 0) {
-                buildMap(node.children);
-            }
-        });
-    }
-    
-    if (oldData) {
-        buildMap(oldData);
-    }
-    
-    function mergeNodes(newNodes) {
-        return newNodes.map(newNode => {
-            const oldNode = oldDataMap.get(newNode.fullPath);
-            if (oldNode && oldNode.children && oldNode.children.length > 0 && newNode.children === null) {
-                newNode.children = mergeNodes(oldNode.children);
-            }
-            return newNode;
-        });
-    }
-    
-    return mergeNodes(newData);
-}
-
 window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
-        const mergedData = mergeTreeData(message.data, fileTreeData);
-        fileTreeData = mergedData;
+        fileTreeData = message.data;
         debouncedRender();
     } else if (message.type === 'children') {
-        const cachedData = loadedChildren.get(message.path) || {};
-        cachedData.children = message.data;
-        loadedChildren.set(message.path, cachedData);
+        const structureOnly = message.data.map(node => ({
+            name: node.name,
+            fullPath: node.fullPath,
+            isDirectory: node.isDirectory,
+            children: node.isDirectory ? null : []
+        }));
+        fileStructureCache.set(message.path, structureOnly);
         
         function updateNodeChildren(nodes, targetPath, newChildren) {
             for (const node of nodes) {
@@ -116,8 +90,30 @@ window.addEventListener('message', event => {
         
         updateNodeChildren(fileTreeData, message.path, message.data);
         debouncedRender();
+    } else if (message.type === 'nodeStates') {
+        updateNodeStates(message.states);
     }
 });
+
+function updateNodeStates(states) {
+    const stateMap = new Map(states.map(s => [s.path, s.excluded]));
+    
+    function updateStates(nodes) {
+        nodes.forEach(node => {
+            if (stateMap.has(node.fullPath)) {
+                node.excluded = stateMap.get(node.fullPath);
+            }
+            if (node.children && node.children.length > 0) {
+                updateStates(node.children);
+            }
+        });
+    }
+    
+    if (fileTreeData) {
+        updateStates(fileTreeData);
+        renderFileTree();
+    }
+}
 
 function debouncedRender() {
     if (renderTimeout) {
@@ -175,9 +171,12 @@ function getNodesBetween(startPath, endPath) {
 }
 
 async function loadChildren(node, nodeId) {
-    if (node.children === null && !loadedChildren.has(node.fullPath)) {
-        loadedChildren.set(node.fullPath, { loading: true });
+    if (node.children === null && !fileStructureCache.has(node.fullPath)) {
         vscode.postMessage({ type: 'getChildren', path: node.fullPath });
+    } else if (node.children === null && fileStructureCache.has(node.fullPath)) {
+        const cached = fileStructureCache.get(node.fullPath);
+        node.children = cached;
+        vscode.postMessage({ type: 'getNodeStates', paths: cached.map(c => c.fullPath) });
     }
 }
 

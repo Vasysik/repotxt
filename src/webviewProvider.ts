@@ -37,11 +37,24 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     const children = await this._core.getWebviewChildren(data.path);
                     webviewView.webview.postMessage({ type: 'children', path: data.path, data: children });
                     break;
+                case 'getNodeStates':
+                    const states = data.paths.map((path: string) => ({
+                        path: path,
+                        excluded: this._core.isPathVisuallyExcluded(path)
+                    }));
+                    webviewView.webview.postMessage({ type: 'nodeStates', states: states });
+                    break;
                 case 'toggleExclude':
                     this._core.toggleExclude(data.path);
                     break;
                 case 'toggleExcludeMultiple':
                     this._core.toggleExcludeMultiple(data.paths);
+                    const affectedPaths = this.collectAllAffectedPaths(data.paths);
+                    const updatedStates = affectedPaths.map(path => ({
+                        path: path,
+                        excluded: this._core.isPathVisuallyExcluded(path)
+                    }));
+                    webviewView.webview.postMessage({ type: 'nodeStates', states: updatedStates });
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');
@@ -60,6 +73,28 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     break;
             }
         });
+    }
+
+    private collectAllAffectedPaths(paths: string[]): string[] {
+        const affectedPaths = new Set<string>();
+        const tree = this._core.getWebviewData();
+        
+        function collectFromTree(nodes: any[], targetPaths: string[]) {
+            nodes.forEach(node => {
+                targetPaths.forEach(targetPath => {
+                    if (node.fullPath.startsWith(targetPath) || targetPath.startsWith(node.fullPath)) {
+                        affectedPaths.add(node.fullPath);
+                    }
+                });
+                if (node.children && node.children.length > 0) {
+                    collectFromTree(node.children, targetPaths);
+                }
+            });
+        }
+        
+        paths.forEach(path => affectedPaths.add(path));
+        
+        return Array.from(affectedPaths);
     }
 
     public async updateWebview() {
