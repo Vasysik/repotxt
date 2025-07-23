@@ -28,6 +28,11 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
+        setTimeout(async () => {
+            const tree = await this._core.getWebviewData();
+            webviewView.webview.postMessage({ type: 'fileTree', data: tree });
+        }, 100);
+
         webviewView.webview.onDidReceiveMessage(async data => {
             switch (data.type) {
                 case 'getFileTree':
@@ -56,6 +61,9 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                         excluded: this._core.isPathVisuallyExcluded(path)
                     }));
                     webviewView.webview.postMessage({ type: 'nodeStates', states: updatedStates });
+                    break;
+                case 'clearSelections':
+                    this._core.clearRanges(data.path);
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');

@@ -379,7 +379,7 @@ function createTreeNode(node, level, parentPath) {
     const name = document.createElement('span');
     name.className = 'node-name';
     name.textContent = node.name;
-
+    
     if (node.partial && !node.isDirectory) {
         const badge = document.createElement('span');
         badge.textContent = '≡';
@@ -415,6 +415,21 @@ function createTreeNode(node, level, parentPath) {
     });
 
     actions.appendChild(eyeBtn);
+
+    if (node.partial && !node.isDirectory) {
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'clear-btn';
+        clearBtn.innerHTML = '<svg viewBox="0 0 16 16"><path d="M2 5h12v1H2zM5 2h6v1H5zM3 7v7c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V7H3zm2 6V9h1v4H5zm2 0V9h2v4H7zm4 0V9h1v4h-1z" fill="currentColor"/></svg>';
+        clearBtn.title = 'Clear selections';
+        
+        clearBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            vscode.postMessage({ type: 'clearSelections', path: node.fullPath });
+            showTooltip('clearBtn', 'Selections cleared');
+        });
+        
+        actions.appendChild(clearBtn);
+    }
 
     content.appendChild(icon);
     content.appendChild(name);

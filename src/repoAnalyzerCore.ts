@@ -306,7 +306,7 @@ export class RepoAnalyzerCore {
 
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
-            if (this.isPathVisuallyExcluded(fullPath)) continue;
+            if (this.isPathEffectivelyExcluded(fullPath)) continue;
 
             if (entry.isDirectory()) {
                 const subResults = await this.generateFileContentBlocks(fullPath);
@@ -315,7 +315,7 @@ export class RepoAnalyzerCore {
                 const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
                 const ranges = this.partialIncludes.get(fullPath);
                 
-                if (ranges && ranges.length > 0 && !this.isPathEffectivelyExcluded(fullPath)) {
+                if (ranges && ranges.length > 0) {
                     const content = await this.readFileContentWithRanges(fullPath, ranges);
                     const rangeDescriptions = ranges.map(r => `${r.start}-${r.end}`).join(', ');
                     results.push(`File: ${relativePath} (lines ${rangeDescriptions})\nContent: ${content}\n`);
@@ -423,6 +423,10 @@ export class RepoAnalyzerCore {
 
     hasPartialIncludes(filePath: string): boolean {
         return this.partialIncludes.has(filePath);
+    }
+
+    getPartialRanges(filePath: string): Range[] | undefined {
+        return this.partialIncludes.get(filePath);
     }
 
     async getWebviewData(): Promise<any[]> {

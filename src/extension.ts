@@ -5,9 +5,17 @@ import { RepoAnalyzerWebviewProvider } from './webviewProvider';
 
 let treeView: vscode.TreeView<any> | undefined;
 let treeViewProvider: TreeViewProvider | undefined;
+let selectionDecoration: vscode.TextEditorDecorationType;
 
 export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
+    
+    selectionDecoration = vscode.window.createTextEditorDecorationType({
+        backgroundColor: new vscode.ThemeColor('editor.selectionBackground'),
+        isWholeLine: false,
+        overviewRulerColor: new vscode.ThemeColor('editor.selectionHighlightBorder'),
+        overviewRulerLane: vscode.OverviewRulerLane.Center
+    });
     
     const config = vscode.workspace.getConfiguration('repotxt');
     const interfaceType = config.get<string>('interfaceType', 'treeview');
@@ -47,6 +55,25 @@ export function activate(context: vscode.ExtensionContext) {
         );
     }
 
+    function updateEditorDecorations(editor: vscode.TextEditor | undefined) {
+        if (!editor) return;
+        
+        const ranges = core.getPartialRanges(editor.document.uri.fsPath);
+        if (!ranges || ranges.length === 0) {
+            editor.setDecorations(selectionDecoration, []);
+            return;
+        }
+        
+        const decorations: vscode.DecorationOptions[] = ranges.map(range => ({
+            range: new vscode.Range(
+                new vscode.Position(range.start - 1, 0),
+                new vscode.Position(range.end - 1, Number.MAX_SAFE_INTEGER)
+            )
+        }));
+        
+        editor.setDecorations(selectionDecoration, decorations);
+    }
+
     context.subscriptions.push(
         vscode.commands.registerCommand('repotxt.refresh', () => core.refresh()),
         vscode.commands.registerCommand('repotxt.resetExclusions', () => core.resetExclusions()),
@@ -84,22 +111,49 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             core.addRanges(editor.document.uri.fsPath, nonEmptySelections);
+            updateEditorDecorations(editor);
             vscode.window.showInformationMessage(`Added ${nonEmptySelections.length} selection(s) to report`);
         }),
-        vscode.commands.registerCommand('repotxt.clearSelections', () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                vscode.window.showWarningMessage('No active editor');
-                return;
+        vscode.commands.registerCommand('repotxt.clearSelections', (filePath?: string) => {
+            if (filePath) {
+                core.clearRanges(filePath);
+                const editor = vscode.window.activeTextEditor;
+                if (editor && editor.document.uri.fsPath === filePath) {
+                    updateEditorDecorations(editor);
+                }
+                vscode.window.showInformationMessage('Cleared selections for file');
+            } else {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    vscode.window.showWarningMessage('No active editor');
+                    return;
+                }
+                core.clearRanges(editor.document.uri.fsPath);
+                updateEditorDecorations(editor);
+                vscode.window.showInformationMessage('Cleared selections for current file');
             }
-            core.clearRanges(editor.document.uri.fsPath);
-            vscode.window.showInformationMessage('Cleared selections for current file');
         }),
         vscode.commands.registerCommand('repotxt.clearAllSelections', () => {
             core.clearAllRanges();
+            updateEditorDecorations(vscode.window.activeTextEditor);
             vscode.window.showInformationMessage('Cleared all selections in workspace');
+        }),
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            updateEditorDecorations(editor);
+        }),
+        vscode.workspace.onDidChangeTextDocument(event => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && editor.document === event.document) {
+                updateEditorDecorations(editor);
+            }
         })
     );
+    
+    updateEditorDecorations(vscode.window.activeTextEditor);
+    
+    core.onDidChange(() => {
+        updateEditorDecorations(vscode.window.activeTextEditor);
+    });
     
     vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('repotxt.interfaceType')) {
@@ -116,5 +170,8 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     if (treeView) {
         treeView.dispose();
+    }
+    if (selectionDecoration) {
+        selectionDecoration.dispose();
     }
 }

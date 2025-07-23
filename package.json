@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -75,19 +75,19 @@
         "icon": "$(settings-gear)"
       },
       {
-          "command": "repotxt.addSelection",
-          "title": "Add Selection to Report",
-          "category": "Repo Analyzer"
+        "command": "repotxt.addSelection",
+        "title": "Add Selection to Report",
+        "category": "Repo Analyzer"
       },
       {
-          "command": "repotxt.clearSelections",
-          "title": "Clear Selections for Current File",
-          "category": "Repo Analyzer"
+        "command": "repotxt.clearSelections",
+        "title": "Clear Selections for Current File",
+        "category": "Repo Analyzer"
       },
       {
-          "command": "repotxt.clearAllSelections",
-          "title": "Clear All Selections in Workspace",
-          "category": "Repo Analyzer"
+        "command": "repotxt.clearAllSelections",
+        "title": "Clear All Selections in Workspace",
+        "category": "Repo Analyzer"
       }
     ],
     "menus": {
@@ -96,6 +96,11 @@
           "command": "repotxt.toggleExclude",
           "when": "view == repotxt",
           "group": "inline"
+        },
+        {
+          "command": "repotxt.clearSelections",
+          "when": "view == repotxt && viewItem == partial",
+          "group": "inline@2"
         }
       ],
       "view/title": [
