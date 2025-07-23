@@ -6,13 +6,14 @@ let lastSelectedNode = null;
 let allNodePaths = [];
 let renderTimeout = null;
 let fileStructureCache = new Map();
+let nodeStateCache = new Map();
 
 const $ = (id) => document.getElementById(id);
 
 function initializeEventListeners() {
     $('refreshBtn').addEventListener('click', () => {
         showTooltip('refreshBtn', 'Refreshing...');
-        fileStructureCache.clear();
+        clearAllCaches();
         vscode.postMessage({ type: 'refresh' });
     });
 
@@ -22,7 +23,7 @@ function initializeEventListeners() {
 
     $('resetBtn').addEventListener('click', () => {
         showTooltip('resetBtn', 'Resetting...');
-        fileStructureCache.clear();
+        clearAllCaches();
         vscode.postMessage({ type: 'resetExclusions' });
     });
 
@@ -44,6 +45,11 @@ function initializeEventListeners() {
     });
 }
 
+function clearAllCaches() {
+    fileStructureCache.clear();
+    nodeStateCache.clear();
+}
+
 function selectAll() {
     selectedNodes = new Set(allNodePaths);
     renderFileTree();
@@ -63,6 +69,7 @@ window.addEventListener('message', event => {
     const message = event.data;
     if (message.type === 'fileTree') {
         fileTreeData = message.data;
+        clearAllCaches();
         debouncedRender();
     } else if (message.type === 'children') {
         const structureOnly = message.data.map(node => ({
@@ -92,17 +99,25 @@ window.addEventListener('message', event => {
         debouncedRender();
     } else if (message.type === 'nodeStates') {
         updateNodeStates(message.states);
+    } else if (message.type === 'fullRefresh') {
+        clearAllCaches();
+        vscode.postMessage({ type: 'getFileTree' });
     }
 });
 
 function updateNodeStates(states) {
     const stateMap = new Map(states.map(s => [s.path, s.excluded]));
     
+    stateMap.forEach((excluded, path) => {
+        nodeStateCache.set(path, excluded);
+    });
+    
     function updateStates(nodes) {
         nodes.forEach(node => {
             if (stateMap.has(node.fullPath)) {
                 node.excluded = stateMap.get(node.fullPath);
             }
+            
             if (node.children && node.children.length > 0) {
                 updateStates(node.children);
             }
@@ -180,10 +195,28 @@ async function loadChildren(node, nodeId) {
     }
 }
 
+function getAllDescendantPaths(node) {
+    const paths = [];
+    
+    function collect(n) {
+        paths.push(n.fullPath);
+        if (n.children && n.children.length > 0) {
+            n.children.forEach(child => collect(child));
+        }
+    }
+    
+    collect(node);
+    return paths;
+}
+
 function createTreeNode(node, level, parentPath) {
     const nodeId = parentPath ? `${parentPath}/${node.name}` : node.name;
     const nodeElement = document.createElement('div');
-    nodeElement.className = 'tree-node' + (node.excluded ? ' node-excluded' : '');
+    
+    const isExcluded = nodeStateCache.has(node.fullPath) ? nodeStateCache.get(node.fullPath) : node.excluded;
+    node.excluded = isExcluded;
+    
+    nodeElement.className = 'tree-node' + (isExcluded ? ' node-excluded' : '');
     nodeElement.dataset.path = node.fullPath;
 
     const content = document.createElement('div');
@@ -239,7 +272,7 @@ function createTreeNode(node, level, parentPath) {
 
     const eyeBtn = document.createElement('button');
     eyeBtn.className = 'eye-btn';
-    eyeBtn.innerHTML = node.excluded 
+    eyeBtn.innerHTML = isExcluded 
         ? '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1 1l14 14" stroke="currentColor" stroke-width="1.3"/></svg>'
         : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
 
@@ -248,6 +281,15 @@ function createTreeNode(node, level, parentPath) {
         const pathsToToggle = selectedNodes.has(node.fullPath) 
             ? Array.from(selectedNodes) 
             : [node.fullPath];
+        
+        if (node.children) {
+            pathsToToggle.forEach(path => {
+                const targetNode = findNodeByPath(fileTreeData, path);
+                if (targetNode) {
+                    clearCacheForPath(path);
+                }
+            });
+        }
         
         vscode.postMessage({ type: 'toggleExcludeMultiple', paths: pathsToToggle });
     });
@@ -314,6 +356,32 @@ function createTreeNode(node, level, parentPath) {
     }
 
     return nodeElement;
+}
+
+function findNodeByPath(nodes, targetPath) {
+    for (const node of nodes) {
+        if (node.fullPath === targetPath) {
+            return node;
+        }
+        if (node.children && node.children.length > 0) {
+            const found = findNodeByPath(node.children, targetPath);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function clearCacheForPath(path) {
+    fileStructureCache.forEach((value, key) => {
+        if (key.startsWith(path)) {
+            fileStructureCache.delete(key);
+        }
+    });
+    nodeStateCache.forEach((value, key) => {
+        if (key.startsWith(path)) {
+            nodeStateCache.delete(key);
+        }
+    });
 }
 
 async function toggleNode(nodeId, node) {

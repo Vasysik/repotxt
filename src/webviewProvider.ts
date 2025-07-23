@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { RepoAnalyzerCore } from './repoAnalyzerCore';
 
 export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
@@ -77,30 +78,44 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
     private collectAllAffectedPaths(paths: string[]): string[] {
         const affectedPaths = new Set<string>();
-        const tree = this._core.getWebviewData();
+        const workspaceRoot = this._core.getWorkspaceRoot();
+        if (!workspaceRoot) return [];
         
-        function collectFromTree(nodes: any[], targetPaths: string[]) {
-            nodes.forEach(node => {
-                targetPaths.forEach(targetPath => {
-                    if (node.fullPath.startsWith(targetPath) || targetPath.startsWith(node.fullPath)) {
-                        affectedPaths.add(node.fullPath);
-                    }
-                });
-                if (node.children && node.children.length > 0) {
-                    collectFromTree(node.children, targetPaths);
+        for (const targetPath of paths) {
+            affectedPaths.add(targetPath);
+            
+            try {
+                if (fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) {
+                    this.collectDescendantPaths(targetPath, affectedPaths);
                 }
-            });
+            } catch (e) {}
+            
+            let parentPath = path.dirname(targetPath);
+            while (parentPath && parentPath !== workspaceRoot && parentPath !== path.dirname(parentPath)) {
+                affectedPaths.add(parentPath);
+                parentPath = path.dirname(parentPath);
+            }
         }
-        
-        paths.forEach(path => affectedPaths.add(path));
         
         return Array.from(affectedPaths);
     }
 
+    private collectDescendantPaths(dirPath: string, result: Set<string>): void {
+        try {
+            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.join(dirPath, entry.name);
+                result.add(fullPath);
+                if (entry.isDirectory()) {
+                    this.collectDescendantPaths(fullPath, result);
+                }
+            }
+        } catch (e) {}
+    }
+
     public async updateWebview() {
         if (this._view) {
-            const tree = await this._core.getWebviewData();
-            this._view.webview.postMessage({ type: 'fileTree', data: tree });
+            this._view.webview.postMessage({ type: 'fullRefresh' });
         }
     }
 
