@@ -4,6 +4,17 @@ All notable changes to the "repotxt" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.3.9] – 2025-07-30
+
+### Changed
+- `media/script.js`
+  - Switched from full tree re-render to targeted DOM updates.
+  - Separated caches for structure vs. state; smoother UI with large repos.
+  - Refactored `updateExpandedStates()` and `toggleNode()` to use the new helper and avoid duplicate code.
+
+### Performance
+- Removed global `innerHTML = ''`; only affected nodes are touched, eliminating blink and reducing GC pressure.
+
 ## [0.3.0] - 2025-07-23
 
 ### Added

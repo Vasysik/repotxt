@@ -13,6 +13,13 @@ let isFirstRender = true;
 
 const $ = (id) => document.getElementById(id);
 
+function setArrowIcon(arrowEl, expanded){
+    arrowEl.innerHTML = expanded
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.976 10.072 12.333 5.715l.619.619L8.285 11H7.667L3 6.334l.619-.619 4.357 4.357Z" fill="currentColor"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.07 8.024 5.715 3.667l.619-.619L11 7.714v.619L6.334 13l-.619-.619 4.356-4.357Z" fill="currentColor"/></svg>' 
+    arrowEl.classList.toggle('expanded', expanded)
+}
+
 function initializeEventListeners() {
     $('refreshBtn').addEventListener('click', () => {
         showTooltip('refreshBtn', 'Refreshing...');
@@ -177,15 +184,16 @@ function updateExpandedStates() {
         const arrow = nodeContent.querySelector('.arrow-icon');
         
         if (childrenContainer && arrow) {
-            if (expandedNodes.has(path)) {
+            const exp = expandedNodes.has(path);
+            if (exp) {
                 childrenContainer.classList.add('expanded');
-                arrow.classList.add('expanded');
-                updateFolderIcon(nodeContent, true);
             } else {
                 childrenContainer.classList.remove('expanded');
-                arrow.classList.remove('expanded');
-                updateFolderIcon(nodeContent, false);
             }
+            
+            setArrowIcon(arrow, exp);
+            
+            updateFolderIcon(nodeContent, exp);
         }
     });
 }
@@ -340,12 +348,9 @@ function createTreeNode(node, level, parentPath) {
     
     if (hasChildren) {
         const arrow = document.createElement('div');
-        arrow.className = 'node-arrow';
-        arrow.innerHTML = `<svg class="arrow-icon ${expandedNodes.has(node.fullPath) ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            ${expandedNodes.has(node.fullPath) 
-                ? '<path fill-rule="evenodd" clip-rule="evenodd" d="M7.97612 10.0719L12.3334 5.7146L12.9521 6.33332L8.28548 11L7.66676 11L3.0001 6.33332L3.61882 5.7146L7.97612 10.0719Z" fill="currentColor"/>'
-                : '<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0719 8.02397L5.7146 3.66666L6.33332 3.04794L11 7.71461V8.33333L6.33332 13L5.7146 12.3813L10.0719 8.02397Z" fill="currentColor"/>'}
-        </svg>`;
+        arrow.className = 'node-arrow arrow-icon';
+        
+        setArrowIcon(arrow, expandedNodes.has(node.fullPath));
 
         arrow.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -527,6 +532,11 @@ async function toggleNode(fullPath, node) {
         if (childrenContainer) {
             childrenContainer.classList.add('expanded');
         }
+    }
+    
+    const arrow = nodeContent.querySelector('.arrow-icon');
+    if (arrow) {
+        setArrowIcon(arrow, expandedNodes.has(fullPath));
     }
     
     updateExpandedStates();
