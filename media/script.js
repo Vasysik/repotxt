@@ -380,6 +380,13 @@ function createTreeNode(node, level, parentPath) {
     name.className = 'node-name';
     name.textContent = node.name;
 
+    if (node.partial && !node.isDirectory) {
+        const badge = document.createElement('span');
+        badge.textContent = '≡';
+        badge.className = 'partial-badge';
+        name.appendChild(badge);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'node-actions';
 

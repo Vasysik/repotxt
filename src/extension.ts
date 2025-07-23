@@ -71,6 +71,33 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 progress.report({ increment: 100 });
             });
+        }),
+        vscode.commands.registerCommand('repotxt.addSelection', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.selections.length === 0) {
+                vscode.window.showWarningMessage('No selection in active editor');
+                return;
+            }
+            const nonEmptySelections = editor.selections.filter(sel => !sel.isEmpty);
+            if (nonEmptySelections.length === 0) {
+                vscode.window.showWarningMessage('Please select some text first');
+                return;
+            }
+            core.addRanges(editor.document.uri.fsPath, nonEmptySelections);
+            vscode.window.showInformationMessage(`Added ${nonEmptySelections.length} selection(s) to report`);
+        }),
+        vscode.commands.registerCommand('repotxt.clearSelections', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showWarningMessage('No active editor');
+                return;
+            }
+            core.clearRanges(editor.document.uri.fsPath);
+            vscode.window.showInformationMessage('Cleared selections for current file');
+        }),
+        vscode.commands.registerCommand('repotxt.clearAllSelections', () => {
+            core.clearAllRanges();
+            vscode.window.showInformationMessage('Cleared all selections in workspace');
         })
     );
     

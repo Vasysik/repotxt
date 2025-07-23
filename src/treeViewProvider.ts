@@ -30,11 +30,16 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
         const isVisuallyExcluded = this.core.isPathVisuallyExcluded(element.fullPath);
         const isDirectory = fs.existsSync(element.fullPath) && fs.statSync(element.fullPath).isDirectory();
         const collapsibleState = isDirectory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+        const hasPartial = this.core.hasPartialIncludes(element.fullPath);
 
         const treeItem = new vscode.TreeItem(element.label as string, collapsibleState);
         treeItem.contextValue = this.core.isPathEffectivelyExcluded(element.fullPath) ? 'excluded' : 'included';
 
-        if (isVisuallyExcluded) {
+        if (hasPartial && !isDirectory) {
+            treeItem.iconPath = new vscode.ThemeIcon('symbol-text');
+            treeItem.description = '(partial)';
+            treeItem.tooltip = 'Partial content included';
+        } else if (isVisuallyExcluded) {
             treeItem.iconPath = new vscode.ThemeIcon('eye-closed');
             treeItem.description = '(excluded)';
             treeItem.tooltip = 'Excluded from report';

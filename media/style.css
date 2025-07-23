@@ -314,3 +314,10 @@ body {
     height: 48px;
     opacity: 0.3;
 }
+
+.partial-badge {
+    margin-left: 4px;
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: bold;
+}

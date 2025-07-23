@@ -2,9 +2,12 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type Range = { start: number; end: number };
+
 interface SessionState {
     includes: string[];
     excludes: string[];
+    partialIncludes?: { [key: string]: Range[] };
 }
 
 export class RepoAnalyzerCore {
@@ -14,6 +17,7 @@ export class RepoAnalyzerCore {
     private autoExcludes: Set<string> = new Set();
     private manualIncludes: Set<string> = new Set();
     private manualExcludes: Set<string> = new Set();
+    private partialIncludes: Map<string, Range[]> = new Map();
     private hasIncludesCache: Map<string, boolean> = new Map();
 
     private readonly sessionStateKey = 'repotxt.sessionState';
@@ -48,9 +52,14 @@ export class RepoAnalyzerCore {
 
     private saveState(): void {
         if (this.workspaceRoot) {
+            const partialIncludesObj: { [key: string]: Range[] } = {};
+            this.partialIncludes.forEach((ranges, path) => {
+                partialIncludesObj[path] = ranges;
+            });
             this.context.workspaceState.update(this.sessionStateKey, {
                 includes: Array.from(this.manualIncludes),
                 excludes: Array.from(this.manualExcludes),
+                partialIncludes: partialIncludesObj
             });
         }
     }
@@ -60,6 +69,12 @@ export class RepoAnalyzerCore {
             const state = this.context.workspaceState.get<SessionState>(this.sessionStateKey);
             this.manualIncludes = new Set(state?.includes || []);
             this.manualExcludes = new Set(state?.excludes || []);
+            this.partialIncludes.clear();
+            if (state?.partialIncludes) {
+                Object.entries(state.partialIncludes).forEach(([path, ranges]) => {
+                    this.partialIncludes.set(path, ranges);
+                });
+            }
         }
     }
 
@@ -123,13 +138,32 @@ export class RepoAnalyzerCore {
         if (this.fileWatcher) this.fileWatcher.dispose();
         if (this.workspaceRoot) {
             this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
-            const handleFileChange = () => {
+            const handleFileChange = (uri: vscode.Uri) => {
+                this.validateRanges(uri.fsPath);
                 this.debouncedRefresh();
             };
-            this.fileWatcher.onDidCreate(handleFileChange);
-            this.fileWatcher.onDidDelete(handleFileChange);
+            this.fileWatcher.onDidCreate(() => this.debouncedRefresh());
+            this.fileWatcher.onDidDelete(() => this.debouncedRefresh());
             this.fileWatcher.onDidChange(handleFileChange);
         }
+    }
+
+    private validateRanges(filePath: string) {
+        const ranges = this.partialIncludes.get(filePath);
+        if (!ranges || ranges.length === 0) return;
+        
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const lineCount = content.split('\n').length;
+            const validRanges = ranges.filter(r => r.start <= lineCount);
+            if (validRanges.length !== ranges.length) {
+                this.partialIncludes.set(filePath, validRanges.map(r => ({
+                    start: r.start,
+                    end: Math.min(r.end, lineCount)
+                })));
+                this.saveState();
+            }
+        } catch (e) {}
     }
 
     private debouncedRefresh() {
@@ -235,6 +269,7 @@ export class RepoAnalyzerCore {
     }
 
     public isPathVisuallyExcluded(fullPath: string): boolean {
+        if (this.partialIncludes.has(fullPath)) return false;
         const isEffectivelyExcluded = this.isPathEffectivelyExcluded(fullPath);
         if (!isEffectivelyExcluded) return false;
         try {
@@ -278,11 +313,54 @@ export class RepoAnalyzerCore {
                 results.push(...subResults);
             } else {
                 const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
-                const content = await this.readFileContent(fullPath);
-                results.push(`File: ${relativePath}\nContent: ${content}\n`);
+                const ranges = this.partialIncludes.get(fullPath);
+                
+                if (ranges && ranges.length > 0 && !this.isPathEffectivelyExcluded(fullPath)) {
+                    const content = await this.readFileContentWithRanges(fullPath, ranges);
+                    const rangeDescriptions = ranges.map(r => `${r.start}-${r.end}`).join(', ');
+                    results.push(`File: ${relativePath} (lines ${rangeDescriptions})\nContent: ${content}\n`);
+                } else {
+                    const content = await this.readFileContent(fullPath);
+                    results.push(`File: ${relativePath}\nContent: ${content}\n`);
+                }
             }
         }
         return results;
+    }
+
+    private async readFileContentWithRanges(filePath: string, ranges: Range[]): Promise<string> {
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const lines = content.split('\n');
+            const selectedLines: string[] = [];
+            
+            const mergedRanges = this.mergeRanges(ranges);
+            for (const range of mergedRanges) {
+                for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
+                    if (i >= 0) selectedLines.push(lines[i]);
+                }
+            }
+            
+            return selectedLines.join('\n');
+        } catch {
+            return '[Unable to read file content]';
+        }
+    }
+
+    private mergeRanges(ranges: Range[]): Range[] {
+        if (ranges.length === 0) return [];
+        const sorted = [...ranges].sort((a, b) => a.start - b.start);
+        const merged: Range[] = [sorted[0]];
+        
+        for (let i = 1; i < sorted.length; i++) {
+            const last = merged[merged.length - 1];
+            if (sorted[i].start <= last.end + 1) {
+                last.end = Math.max(last.end, sorted[i].end);
+            } else {
+                merged.push(sorted[i]);
+            }
+        }
+        return merged;
     }
 
     private async readFileContent(filePath: string): Promise<string> {
@@ -316,6 +394,37 @@ export class RepoAnalyzerCore {
         return report;
     }
 
+    addRanges(filePath: string, selections: readonly vscode.Selection[]): void {
+        const ranges: Range[] = selections.map(sel => ({
+            start: sel.start.line + 1,
+            end: sel.end.line + 1
+        }));
+        
+        const existingRanges = this.partialIncludes.get(filePath) || [];
+        const allRanges = [...existingRanges, ...ranges];
+        const mergedRanges = this.mergeRanges(allRanges);
+        
+        this.partialIncludes.set(filePath, mergedRanges);
+        this.saveState();
+        this.refresh();
+    }
+
+    clearRanges(filePath: string): void {
+        this.partialIncludes.delete(filePath);
+        this.saveState();
+        this.refresh();
+    }
+
+    clearAllRanges(): void {
+        this.partialIncludes.clear();
+        this.saveState();
+        this.refresh();
+    }
+
+    hasPartialIncludes(filePath: string): boolean {
+        return this.partialIncludes.has(filePath);
+    }
+
     async getWebviewData(): Promise<any[]> {
         if (!this.workspaceRoot) return [];
         return this.getWebviewFileTree(this.workspaceRoot, 0, 0);
@@ -341,6 +450,7 @@ export class RepoAnalyzerCore {
                     fullPath: fullPath,
                     isDirectory: entry.isDirectory(),
                     excluded: isExcluded,
+                    partial: this.hasPartialIncludes(fullPath),
                     children: entry.isDirectory() ? null : []
                 };
 
