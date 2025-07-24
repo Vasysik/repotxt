@@ -270,9 +270,10 @@ body {
     justify-content: center;
     width: 16px;
     height: 16px;
-    margin-left: 4px;
+    margin-left: 6px;
     color: var(--vscode-editorInfo-foreground, #00AFFF);
     pointer-events: none;
+    flex-shrink: 0;
 }
 
 .partial-badge svg {

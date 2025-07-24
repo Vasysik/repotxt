@@ -174,15 +174,13 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
     const clearBtn = nodeContent.querySelector('.clear-btn');
     
     if (isPartial) {
-        // если бейджа нет – создаём
         if (!badge) {
-            const name = nodeContent.querySelector('.node-name');
             const newBadge = document.createElement('span');
             newBadge.className = 'partial-badge';
-            newBadge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M2 10V9H14V10H2ZM2 6H14V7H2V6ZM14 3V4H2V3H14Z" fill="currentColor"/> <path d="M2 12V13H14V12H2Z" fill="currentColor"/> </svg>';
-            name.appendChild(newBadge);
+            newBadge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+            const actions = nodeContent.querySelector('.node-actions');
+            nodeContent.insertBefore(newBadge, actions);
         }
-        // если clear-кнопки нет – создаём
         if (!clearBtn) {
             const actions = nodeContent.querySelector('.node-actions');
             const btn = document.createElement('button');
@@ -423,14 +421,6 @@ function createTreeNode(node, level, parentPath) {
     const name = document.createElement('span');
     name.className = 'node-name';
     name.textContent = node.name;
-    
-    if (node.partial && !node.isDirectory) {
-        // бейдж с полосками – просто декоративный
-        const badge = document.createElement('span');
-        badge.className = 'partial-badge';
-        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M2 10V9H14V10H2ZM2 6H14V7H2V6ZM14 3V4H2V3H14Z" fill="currentColor"/> <path d="M2 12V13H14V12H2Z" fill="currentColor"/> </svg>';
-        name.appendChild(badge);
-    }
 
     const actions = document.createElement('div');
     actions.className = 'node-actions';
@@ -462,7 +452,6 @@ function createTreeNode(node, level, parentPath) {
     actions.appendChild(eyeBtn);
 
     if (node.partial && !node.isDirectory) {
-        // и ЗАНОВО добавляем clear-кнопку, как раньше
         const clearBtn = document.createElement('button');
         clearBtn.className = 'clear-btn';
         clearBtn.title = 'Clear selections';
@@ -478,6 +467,14 @@ function createTreeNode(node, level, parentPath) {
 
     content.appendChild(icon);
     content.appendChild(name);
+    
+    if (node.partial && !node.isDirectory) {
+        const badge = document.createElement('span');
+        badge.className = 'partial-badge';
+        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+        content.insertBefore(badge, actions);
+    }
+    
     content.appendChild(actions);
 
     content.addEventListener('click', async (e) => {
