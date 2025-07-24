@@ -340,24 +340,23 @@ body {
     opacity: 0.3;
 }
 
-.clear-wrapper {
-    position: relative;
-    display: flex;
-}
-
 .partial-badge {
     position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-top: 2px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    right: 30px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 16px;
     height: 16px;
     color: var(--vscode-editorInfo-foreground, #00AFFF);
     pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.15s;
+}
+
+.node-content:hover .partial-badge,
+.node-content.selected .partial-badge,
+.node-content.multi-selected .partial-badge {
+    opacity: 0;
 }
 
 .partial-badge svg {
