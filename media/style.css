@@ -341,10 +341,8 @@ body {
 }
 
 .partial-badge {
-    position: absolute;
-    right: 30px;
-    top: 50%;
-    transform: translateY(-50%);
+    position: relative;
+    margin-left: 4px;
     width: 16px;
     height: 16px;
     color: var(--vscode-editorInfo-foreground, #00AFFF);

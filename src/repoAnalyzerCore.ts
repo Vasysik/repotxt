@@ -294,7 +294,6 @@ export class RepoAnalyzerCore {
     }
 
     public isPathVisuallyExcluded(fullPath: string): boolean {
-        if (this.partialIncludes.has(fullPath)) return false;
         const isEffectivelyExcluded = this.isPathEffectivelyExcluded(fullPath);
         if (!isEffectivelyExcluded) return false;
         try {

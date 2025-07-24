@@ -170,19 +170,12 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
             : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
     }
     
-    let badge = nodeContent.querySelector('.partial-badge');
+    const actions = nodeContent.querySelector('.node-actions');
+    let clearBtn = actions.querySelector('.clear-btn');
+    let badge = actions.querySelector('.partial-badge');
     
     if (isPartial) {
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'partial-badge';
-            badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
-            nodeContent.appendChild(badge);
-        }
-        
-        let clearBtn = nodeContent.querySelector('.clear-btn');
         if (!clearBtn) {
-            const actions = nodeContent.querySelector('.node-actions');
             clearBtn = document.createElement('button');
             clearBtn.className = 'clear-btn';
             clearBtn.title = 'Clear selections';
@@ -194,10 +187,16 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
             });
             actions.appendChild(clearBtn);
         }
+        
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'partial-badge';
+            badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+            actions.appendChild(badge);
+        }
     } else {
-        if (badge) badge.remove();
-        const clearBtn = nodeContent.querySelector('.clear-btn');
         if (clearBtn) clearBtn.remove();
+        if (badge) badge.remove();
     }
 }
 
@@ -462,18 +461,15 @@ function createTreeNode(node, level, parentPath) {
             vscode.postMessage({ type: 'clearSelections', path: node.fullPath });
         });
         actions.appendChild(clearBtn);
+        
+        const badge = document.createElement('span');
+        badge.className = 'partial-badge';
+        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+        actions.appendChild(badge);
     }
 
     content.appendChild(icon);
     content.appendChild(name);
-    
-    if (node.partial) {
-        const badge = document.createElement('span');
-        badge.className = 'partial-badge';
-        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
-        content.appendChild(badge);
-    }
-    
     content.appendChild(actions);
 
     content.addEventListener('click', async (e) => {
