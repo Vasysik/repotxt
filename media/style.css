@@ -264,6 +264,31 @@ body {
     height: 16px;
 }
 
+.partial-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--vscode-editorInfo-foreground, #00AFFF);
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s;
+    padding: 2px;
+    margin-left: 2px;
+}
+
+.partial-btn:hover {
+    color: var(--text-primary);
+}
+
+.partial-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
 .clear-btn {
     width: 20px;
     height: 20px;
@@ -338,16 +363,4 @@ body {
     width: 48px;
     height: 48px;
     opacity: 0.3;
-}
-
-.partial-badge {
-    margin-left: 4px;
-    vertical-align: middle;
-}
-
-.partial-badge svg {
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
-    color: var(--vscode-editorInfo-foreground, #00AFFF);
 }

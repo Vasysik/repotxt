@@ -11,15 +11,26 @@ let webviewProvider: RepoAnalyzerWebviewProvider | undefined;
 export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
     
-    selectionDecoration = vscode.window.createTextEditorDecorationType({
-        gutterIconPath: vscode.Uri.parse(
-            'data:image/svg+xml;base64,' +
-            Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="16"><rect width="4" height="16" fill="%2300AFFF"/></svg>').toString('base64')
-        ),
-        gutterIconSize: 'contain',
-        overviewRulerColor: new vscode.ThemeColor('editorOverviewRuler.addedForeground'),
-        overviewRulerLane: vscode.OverviewRulerLane.Left
-    });
+    function createSelectionDecoration(): vscode.TextEditorDecorationType {
+        const config = vscode.workspace.getConfiguration('repotxt');
+        const color = config.get<string>('selectionHighlightColor', '#00AFFF');
+        
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="18" viewBox="0 0 14 18">
+            <rect x="3" y="3" width="8" height="12" rx="2" fill="${color}" opacity="0.8"/>
+        </svg>`;
+        
+        return vscode.window.createTextEditorDecorationType({
+            gutterIconPath: vscode.Uri.parse(
+                'data:image/svg+xml;base64,' + 
+                Buffer.from(svg).toString('base64')
+            ),
+            gutterIconSize: 'contain',
+            overviewRulerColor: new vscode.ThemeColor('editorOverviewRuler.addedForeground'),
+            overviewRulerLane: vscode.OverviewRulerLane.Left
+        });
+    }
+    
+    selectionDecoration = createSelectionDecoration();
     
     const config = vscode.workspace.getConfiguration('repotxt');
     const interfaceType = config.get<string>('interfaceType', 'treeview');
@@ -168,6 +179,21 @@ export function activate(context: vscode.ExtensionContext) {
             if (editor && editor.document === event.document) {
                 updateEditorDecorations(editor);
             }
+        }),
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('repotxt.selectionHighlightColor')) {
+                selectionDecoration.dispose();
+                selectionDecoration = createSelectionDecoration();
+                updateEditorDecorations(vscode.window.activeTextEditor);
+            }
+            if (e.affectsConfiguration('repotxt.interfaceType')) {
+                vscode.window.showInformationMessage('Please reload VS Code to apply interface type change.', 'Reload')
+                    .then(action => {
+                        if (action === 'Reload') {
+                            vscode.commands.executeCommand('workbench.action.reloadWindow');
+                        }
+                    });
+            }
         })
     );
     
@@ -175,17 +201,6 @@ export function activate(context: vscode.ExtensionContext) {
     
     core.onDidChange(() => {
         updateEditorDecorations(vscode.window.activeTextEditor);
-    });
-    
-    vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('repotxt.interfaceType')) {
-            vscode.window.showInformationMessage('Please reload VS Code to apply interface type change.', 'Reload')
-                .then(action => {
-                    if (action === 'Reload') {
-                        vscode.commands.executeCommand('workbench.action.reloadWindow');
-                    }
-                });
-        }
     });
 }
 
