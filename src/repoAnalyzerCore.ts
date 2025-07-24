@@ -10,6 +10,12 @@ interface SessionState {
     partialIncludes?: { [key: string]: Range[] };
 }
 
+interface NodeState {
+    path: string;
+    excluded: boolean;
+    partial: boolean;
+}
+
 export class RepoAnalyzerCore {
     private workspaceRoot: string | undefined;
     private fileWatcher: vscode.FileSystemWatcher | undefined;
@@ -23,6 +29,9 @@ export class RepoAnalyzerCore {
     private readonly sessionStateKey = 'repotxt.sessionState';
     private _onDidChange = new vscode.EventEmitter<void>();
     readonly onDidChange = this._onDidChange.event;
+    
+    private _onDidUpdateNodes = new vscode.EventEmitter<NodeState[]>();
+    readonly onDidUpdateNodes = this._onDidUpdateNodes.event;
     
     private refreshTimeout: NodeJS.Timeout | undefined;
 
@@ -82,9 +91,10 @@ export class RepoAnalyzerCore {
         if (!this.workspaceRoot) return;
         this.manualIncludes.clear();
         this.manualExcludes.clear();
+        this.partialIncludes.clear();
         this.saveState();
         this.refresh();
-        vscode.window.showInformationMessage('Manual exclusions have been reset.');
+        vscode.window.showInformationMessage('All manual settings (exclusions & selections) have been reset.');
     }
 
     private async recalculateAutoExclusions() {
@@ -363,6 +373,19 @@ export class RepoAnalyzerCore {
         return merged;
     }
 
+    private subtractRange(r: Range, s: Range): Range[] {
+        if (s.end < r.start || s.start > r.end) return [r];
+        if (s.start <= r.start && s.end >= r.end) return [];
+        if (s.start > r.start && s.end < r.end) {
+            return [
+                { start: r.start, end: s.start - 1 },
+                { start: s.end + 1, end: r.end }
+            ];
+        }
+        if (s.start <= r.start) return [{ start: s.end + 1, end: r.end }];
+        return [{ start: r.start, end: s.start - 1 }];
+    }
+
     private async readFileContent(filePath: string): Promise<string> {
         try {
             const config = vscode.workspace.getConfiguration('repotxt');
@@ -407,6 +430,11 @@ export class RepoAnalyzerCore {
         this.partialIncludes.set(filePath, mergedRanges);
         this.saveState();
         this.refresh();
+        this._onDidUpdateNodes.fire([{
+            path: filePath,
+            excluded: this.isPathVisuallyExcluded(filePath),
+            partial: true
+        }]);
     }
 
     removeRanges(filePath: string, selections: readonly vscode.Selection[]): void {
@@ -418,28 +446,35 @@ export class RepoAnalyzerCore {
             end: sel.end.line + 1
         }));
         
-        const remainingRanges = existingRanges.filter(existingRange => {
-            return !selectionsAsRanges.some(selRange => 
-                (existingRange.start >= selRange.start && existingRange.start <= selRange.end) ||
-                (existingRange.end >= selRange.start && existingRange.end <= selRange.end) ||
-                (existingRange.start <= selRange.start && existingRange.end >= selRange.end)
-            );
-        });
+        let current = existingRanges;
+        for (const sel of selectionsAsRanges) {
+            current = current.flatMap(r => this.subtractRange(r, sel));
+        }
         
-        if (remainingRanges.length === 0) {
+        if (current.length === 0) {
             this.partialIncludes.delete(filePath);
         } else {
-            this.partialIncludes.set(filePath, remainingRanges);
+            this.partialIncludes.set(filePath, current);
         }
         
         this.saveState();
         this.refresh();
+        this._onDidUpdateNodes.fire([{
+            path: filePath,
+            excluded: this.isPathVisuallyExcluded(filePath),
+            partial: this.hasPartialIncludes(filePath)
+        }]);
     }
 
     clearRanges(filePath: string): void {
         this.partialIncludes.delete(filePath);
         this.saveState();
         this.refresh();
+        this._onDidUpdateNodes.fire([{
+            path: filePath,
+            excluded: this.isPathVisuallyExcluded(filePath),
+            partial: false
+        }]);
     }
 
     clearAllRanges(): void {

@@ -12,6 +12,11 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         private _core: RepoAnalyzerCore
     ) {
         this._core.onDidChange(() => this.updateWebview());
+        this._core.onDidUpdateNodes((nodes) => {
+            if (this._view) {
+                this._view.webview.postMessage({ type: 'nodeStates', states: nodes });
+            }
+        });
     }
 
     public resolveWebviewView(
@@ -27,11 +32,8 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         };
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
-        setTimeout(async () => {
-            const tree = await this._core.getWebviewData();
-            webviewView.webview.postMessage({ type: 'fileTree', data: tree });
-        }, 100);
+        
+        this.updateWebview();
 
         webviewView.webview.onDidReceiveMessage(async data => {
             switch (data.type) {
@@ -46,7 +48,8 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                 case 'getNodeStates':
                     const states = data.paths.map((path: string) => ({
                         path: path,
-                        excluded: this._core.isPathVisuallyExcluded(path)
+                        excluded: this._core.isPathVisuallyExcluded(path),
+                        partial: this._core.hasPartialIncludes(path)
                     }));
                     webviewView.webview.postMessage({ type: 'nodeStates', states: states });
                     break;
@@ -58,13 +61,22 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     const affectedPaths = this.collectAllAffectedPaths(data.paths);
                     const updatedStates = affectedPaths.map(path => ({
                         path: path,
-                        excluded: this._core.isPathVisuallyExcluded(path)
+                        excluded: this._core.isPathVisuallyExcluded(path),
+                        partial: this._core.hasPartialIncludes(path)
                     }));
                     webviewView.webview.postMessage({ type: 'nodeStates', states: updatedStates });
                     break;
                 case 'clearSelections':
-                    this._core.clearRanges(data.path);
-                    this.updateWebview();
+                    if (data.useEditor) {
+                        const editor = vscode.window.activeTextEditor;
+                        if (editor && editor.document.uri.fsPath === data.path && editor.selections.some(s => !s.isEmpty)) {
+                            this._core.removeRanges(data.path, editor.selections.filter(s => !s.isEmpty));
+                        } else {
+                            this._core.clearRanges(data.path);
+                        }
+                    } else {
+                        this._core.clearRanges(data.path);
+                    }
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');

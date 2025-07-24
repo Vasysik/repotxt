@@ -7,6 +7,7 @@ let allNodePaths = [];
 let renderTimeout = null;
 let fileStructureCache = new Map();
 let nodeStateCache = new Map();
+let partialCache = new Map();
 let isInitialLoad = true;
 let domMap = new Map();
 let isFirstRender = true;
@@ -58,6 +59,7 @@ function initializeEventListeners() {
 function clearAllCaches() {
     fileStructureCache.clear();
     nodeStateCache.clear();
+    partialCache.clear();
     domMap.clear();
     isFirstRender = true;
 }
@@ -123,20 +125,23 @@ window.addEventListener('message', event => {
 });
 
 function updateNodeStates(states) {
-    const stateMap = new Map(states.map(s => [s.path, s.excluded]));
+    const stateMap = new Map(states.map(s => [s.path, { excluded: s.excluded, partial: s.partial }]));
     
-    stateMap.forEach((excluded, path) => {
-        nodeStateCache.set(path, excluded);
+    stateMap.forEach((state, path) => {
+        nodeStateCache.set(path, state.excluded);
+        partialCache.set(path, state.partial);
         const nodeEl = domMap.get(path);
         if (nodeEl) {
-            updateNodeExcludedState(nodeEl, excluded);
+            updateNodeVisualState(nodeEl, state.excluded, state.partial);
         }
     });
     
     function updateStates(nodes) {
         nodes.forEach(node => {
-            if (stateMap.has(node.fullPath)) {
-                node.excluded = stateMap.get(node.fullPath);
+            const state = stateMap.get(node.fullPath);
+            if (state) {
+                node.excluded = state.excluded;
+                node.partial = state.partial;
             }
             
             if (node.children && node.children.length > 0) {
@@ -150,7 +155,7 @@ function updateNodeStates(states) {
     }
 }
 
-function updateNodeExcludedState(nodeContent, isExcluded) {
+function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
     const treeNode = nodeContent.parentElement;
     if (isExcluded) {
         treeNode.classList.add('node-excluded');
@@ -164,6 +169,38 @@ function updateNodeExcludedState(nodeContent, isExcluded) {
             ? '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1 1l14 14" stroke="currentColor" stroke-width="1.3"/></svg>'
             : '<svg viewBox="0 0 16 16"><path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
     }
+    
+    const badge = nodeContent.querySelector('.partial-badge');
+    const clearBtn = nodeContent.querySelector('.clear-btn');
+    
+    if (isPartial && !treeNode.querySelector('.partial-badge')) {
+        const name = nodeContent.querySelector('.node-name');
+        const badge = document.createElement('span');
+        badge.className = 'partial-badge';
+        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M2 10V9H14V10H2ZM2 6H14V7H2V6ZM14 3V4H2V3H14Z" fill="currentColor"/> <path d="M2 12V13H14V12H2Z" fill="currentColor"/> </svg>';
+        name.appendChild(badge);
+        
+        if (!clearBtn) {
+            const actions = nodeContent.querySelector('.node-actions');
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'clear-btn';
+            clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="currentColor"/> <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="currentColor"/> <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="currentColor"/> <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="currentColor"/> <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="currentColor"/> </svg>';
+            clearBtn.title = 'Clear selections';
+            clearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                vscode.postMessage({ type: 'clearSelections', path: node.fullPath, useEditor: true });
+            });
+            actions.appendChild(clearBtn);
+        }
+    } else if (!isPartial) {
+        if (badge) badge.remove();
+        if (clearBtn) clearBtn.remove();
+    }
+}
+
+function updateNodeExcludedState(nodeContent, isExcluded) {
+    const partial = partialCache.get(nodeContent.parentElement.dataset.path) || false;
+    updateNodeVisualState(nodeContent, isExcluded, partial);
 }
 
 function updateSelectionStates() {
@@ -330,6 +367,9 @@ function createTreeNode(node, level, parentPath) {
     
     const isExcluded = nodeStateCache.has(node.fullPath) ? nodeStateCache.get(node.fullPath) : node.excluded;
     node.excluded = isExcluded;
+    
+    const isPartial = partialCache.has(node.fullPath) ? partialCache.get(node.fullPath) : node.partial;
+    node.partial = isPartial;
     
     nodeElement.className = 'tree-node' + (isExcluded ? ' node-excluded' : '');
     nodeElement.dataset.path = node.fullPath;
@@ -515,6 +555,11 @@ function clearCacheForPath(path) {
     nodeStateCache.forEach((value, key) => {
         if (key.startsWith(path)) {
             nodeStateCache.delete(key);
+        }
+    });
+    partialCache.forEach((value, key) => {
+        if (key.startsWith(path)) {
+            partialCache.delete(key);
         }
     });
 }
