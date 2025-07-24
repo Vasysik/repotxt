@@ -35,6 +35,12 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         
         this.updateWebview();
 
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                webviewView.webview.postMessage({ type: 'fullRefresh' });
+            }
+        });
+
         webviewView.webview.onDidReceiveMessage(async data => {
             switch (data.type) {
                 case 'getFileTree':

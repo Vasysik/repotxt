@@ -264,27 +264,18 @@ body {
     height: 16px;
 }
 
-.partial-btn {
-    width: 20px;
-    height: 20px;
-    border: none;
-    background: transparent;
-    color: var(--vscode-editorInfo-foreground, #00AFFF);
-    cursor: pointer;
-    border-radius: 3px;
+.partial-badge {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.15s;
-    padding: 2px;
-    margin-left: 2px;
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    color: var(--vscode-editorInfo-foreground, #00AFFF);
+    pointer-events: none;
 }
 
-.partial-btn:hover {
-    color: var(--text-primary);
-}
-
-.partial-btn svg {
+.partial-badge svg {
     width: 16px;
     height: 16px;
 }
