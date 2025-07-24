@@ -232,6 +232,8 @@ body {
     margin-left: auto;
     opacity: 0;
     transition: opacity 0.15s;
+    position: relative;
+    gap: 4px;
 }
 
 .node-content:hover .node-actions,
@@ -240,7 +242,7 @@ body {
     opacity: 1;
 }
 
-.eye-btn {
+.eye-btn, .clear-btn {
     width: 20px;
     height: 20px;
     border: none;
@@ -255,29 +257,23 @@ body {
     padding: 2px;
 }
 
-.eye-btn:hover {
+.eye-btn:hover, .clear-btn:hover {
     color: var(--text-primary);
 }
 
-.eye-btn svg {
+.clear-btn:hover {
+    color: var(--vscode-errorForeground);
+}
+
+.eye-btn svg, .clear-btn svg {
     width: 16px;
     height: 16px;
 }
 
-.clear-btn {
-    width: 20px;
-    height: 20px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: 3px;
+.node-content:hover .clear-btn,
+.node-content.selected .clear-btn,
+.node-content.multi-selected .clear-btn {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.15s;
-    padding: 2px;
-    margin-left: 2px;
 }
 
 .clear-btn:hover {
@@ -285,6 +281,30 @@ body {
 }
 
 .clear-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.partial-badge {
+    position: absolute;
+    right: 8px;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    color: var(--vscode-editorInfo-foreground, #00AFFF);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.node-content:hover .partial-badge,
+.node-content.selected .partial-badge,
+.node-content.multi-selected .partial-badge {
+    display: none;
+}
+
+.partial-badge svg {
     width: 16px;
     height: 16px;
 }
@@ -338,26 +358,4 @@ body {
     width: 48px;
     height: 48px;
     opacity: 0.3;
-}
-
-.partial-badge {
-    position: relative;
-    margin-left: 4px;
-    width: 16px;
-    height: 16px;
-    color: var(--vscode-editorInfo-foreground, #00AFFF);
-    pointer-events: none;
-    opacity: 1;
-    transition: opacity 0.15s;
-}
-
-.node-content:hover .partial-badge,
-.node-content.selected .partial-badge,
-.node-content.multi-selected .partial-badge {
-    opacity: 0;
-}
-
-.partial-badge svg {
-    width: 16px;
-    height: 16px;
 }

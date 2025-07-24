@@ -171,8 +171,8 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
     }
     
     const actions = nodeContent.querySelector('.node-actions');
+    actions.style.position = 'relative';
     let clearBtn = actions.querySelector('.clear-btn');
-    let badge = actions.querySelector('.partial-badge');
     
     if (isPartial) {
         if (!clearBtn) {
@@ -188,14 +188,17 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
             actions.appendChild(clearBtn);
         }
         
+        let badge = nodeContent.querySelector('.partial-badge');
         if (!badge) {
             badge = document.createElement('span');
             badge.className = 'partial-badge';
             badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
-            actions.appendChild(badge);
+            nodeContent.appendChild(badge);
         }
     } else {
         if (clearBtn) clearBtn.remove();
+
+        const badge = nodeContent.querySelector('.partial-badge');
         if (badge) badge.remove();
     }
 }
@@ -424,6 +427,7 @@ function createTreeNode(node, level, parentPath) {
 
     const actions = document.createElement('div');
     actions.className = 'node-actions';
+    actions.style.position = 'relative';
 
     const eyeBtn = document.createElement('button');
     eyeBtn.className = 'eye-btn';
