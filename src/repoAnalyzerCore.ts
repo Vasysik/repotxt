@@ -25,6 +25,7 @@ export class RepoAnalyzerCore {
     private manualExcludes: Set<string> = new Set();
     private partialIncludes: Map<string, Range[]> = new Map();
     private hasIncludesCache: Map<string, boolean> = new Map();
+    private hasPartialsCache: Map<string, boolean> = new Map();
 
     private readonly sessionStateKey = 'repotxt.sessionState';
     private _onDidChange = new vscode.EventEmitter<void>();
@@ -222,6 +223,7 @@ export class RepoAnalyzerCore {
 
     refresh(): void {
         this.hasIncludesCache.clear();
+        this.hasPartialsCache.clear();
         this._onDidChange.fire();
     }
 
@@ -278,13 +280,29 @@ export class RepoAnalyzerCore {
         return false;
     }
 
+    private folderContainsPartialIncludes(dirPath: string): boolean {
+        if (this.hasPartialsCache.has(dirPath)) return this.hasPartialsCache.get(dirPath)!;
+        const dirPathWithSep = dirPath + path.sep;
+        for (const p of this.partialIncludes.keys()) {
+            if (p.startsWith(dirPathWithSep)) {
+                this.hasPartialsCache.set(dirPath, true);
+                return true;
+            }
+        }
+        this.hasPartialsCache.set(dirPath, false);
+        return false;
+    }
+
     public isPathVisuallyExcluded(fullPath: string): boolean {
         if (this.partialIncludes.has(fullPath)) return false;
         const isEffectivelyExcluded = this.isPathEffectivelyExcluded(fullPath);
         if (!isEffectivelyExcluded) return false;
         try {
-            if (fs.statSync(fullPath).isDirectory() && this.folderContainsManualIncludes(fullPath)) {
-                return false;
+            if (fs.statSync(fullPath).isDirectory()) {
+                if (this.folderContainsManualIncludes(fullPath) || 
+                    this.folderContainsPartialIncludes(fullPath)) {
+                    return false;
+                }
             }
         } catch (e) { /* ignore */ }
         return true;
