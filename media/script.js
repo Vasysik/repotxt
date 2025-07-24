@@ -172,34 +172,29 @@ function updateNodeVisualState(nodeContent, isExcluded, isPartial) {
     
     const actions = nodeContent.querySelector('.node-actions');
     actions.style.position = 'relative';
+
     let clearBtn = actions.querySelector('.clear-btn');
+    if (clearBtn) clearBtn.remove();
+    
+    let badge = nodeContent.querySelector('.partial-badge');
+    if (badge) badge.remove();
     
     if (isPartial) {
-        if (!clearBtn) {
-            clearBtn = document.createElement('button');
-            clearBtn.className = 'clear-btn';
-            clearBtn.title = 'Clear selections';
-            clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="currentColor"/> <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="currentColor"/> <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="currentColor"/> <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="currentColor"/> <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="currentColor"/> </svg>';
-            clearBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const p = nodeContent.parentElement.dataset.path;
-                vscode.postMessage({ type: 'clearSelections', path: p });
-            });
-            actions.appendChild(clearBtn);
-        }
+        clearBtn = document.createElement('button');
+        clearBtn.className = 'clear-btn';
+        clearBtn.title = 'Clear selections';
+        clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"> <path d="M10.0001 12.6L10.7001 13.3L12.3001 11.7L13.9001 13.3L14.7001 12.6L13.0001 11L14.7001 9.40005L13.9001 8.60005L12.3001 10.3L10.7001 8.60005L10.0001 9.40005L11.6001 11L10.0001 12.6Z" fill="currentColor"/> <path d="M1.00006 4L15.0001 4L15.0001 3L1.00006 3L1.00006 4Z" fill="currentColor"/> <path d="M1.00006 7L15.0001 7L15.0001 6L1.00006 6L1.00006 7Z" fill="currentColor"/> <path d="M9.00006 9.5L9.00006 9L1.00006 9L1.00006 10L9.00006 10L9.00006 9.5Z" fill="currentColor"/> <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="currentColor"/> </svg>';
+        clearBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const p = nodeContent.parentElement.dataset.path;
+            vscode.postMessage({ type: 'clearSelections', path: p });
+        });
+        actions.appendChild(clearBtn);
         
-        let badge = nodeContent.querySelector('.partial-badge');
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'partial-badge';
-            badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
-            nodeContent.appendChild(badge);
-        }
-    } else {
-        if (clearBtn) clearBtn.remove();
-
-        const badge = nodeContent.querySelector('.partial-badge');
-        if (badge) badge.remove();
+        badge = document.createElement('span');
+        badge.className = 'partial-badge';
+        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+        nodeContent.appendChild(badge);
     }
 }
 
@@ -465,16 +460,18 @@ function createTreeNode(node, level, parentPath) {
             vscode.postMessage({ type: 'clearSelections', path: node.fullPath });
         });
         actions.appendChild(clearBtn);
-        
-        const badge = document.createElement('span');
-        badge.className = 'partial-badge';
-        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
-        actions.appendChild(badge);
     }
 
     content.appendChild(icon);
     content.appendChild(name);
     content.appendChild(actions);
+
+    if (node.partial) {
+        const badge = document.createElement('span');
+        badge.className = 'partial-badge';
+        badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10V9H14V10H2Z M2 6H14V7H2V6Z M14 3V4H2V3H14Z" fill="currentColor"/><path d="M2 12V13H14V12H2Z" fill="currentColor"/></svg>';
+        content.appendChild(badge);
+    }
 
     content.addEventListener('click', async (e) => {
         const ctrlPressed = e.ctrlKey || e.metaKey;

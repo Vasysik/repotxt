@@ -255,6 +255,7 @@ body {
     justify-content: center;
     transition: opacity 0.15s;
     padding: 2px;
+    opacity: 1;
 }
 
 .eye-btn:hover, .clear-btn:hover {
