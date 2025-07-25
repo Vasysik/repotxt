@@ -26,6 +26,7 @@ export class RepoAnalyzerCore {
     private partialIncludes: Map<string, Range[]> = new Map();
     private hasIncludesCache: Map<string, boolean> = new Map();
     private hasPartialsCache: Map<string, boolean> = new Map();
+    private fileStatsCache = new Map<string, { lines: number; chars: number }>();
 
     private readonly sessionStateKey = 'repotxt.sessionState';
     private _onDidChange = new vscode.EventEmitter<void>();
@@ -224,6 +225,7 @@ export class RepoAnalyzerCore {
     refresh(): void {
         this.hasIncludesCache.clear();
         this.hasPartialsCache.clear();
+        this.fileStatsCache.clear();
         this._onDidChange.fire();
     }
 
@@ -555,6 +557,8 @@ export class RepoAnalyzerCore {
                     isDirectory: entry.isDirectory(),
                     excluded: isExcluded,
                     partial: this.hasPartialIncludes(fullPath),
+                    lines: entry.isDirectory() ? 0 : this.getFileStats(fullPath).lines,
+                    chars: entry.isDirectory() ? 0 : this.getFileStats(fullPath).chars,
                     children: entry.isDirectory() ? null : []
                 };
 
@@ -572,6 +576,18 @@ export class RepoAnalyzerCore {
 
     getWorkspaceRoot(): string | undefined {
         return this.workspaceRoot;
+    }
+
+    public getFileStats(fullPath: string): { lines: number; chars: number } {
+        if (this.fileStatsCache.has(fullPath)) return this.fileStatsCache.get(fullPath)!;
+        try {
+            const txt = fs.readFileSync(fullPath, 'utf8');
+            const stat = { lines: txt.split('\n').length, chars: txt.length };
+            this.fileStatsCache.set(fullPath, stat);
+            return stat;
+        } catch { 
+            return { lines: 0, chars: 0 }; 
+        }
     }
 
     dispose() {

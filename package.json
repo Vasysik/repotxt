@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.3.38",
+  "version": "0.3.41",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -253,6 +253,26 @@
           "type": "string",
           "default": "#00AFFF",
           "description": "Color for partial selection highlights in the gutter (hex format)"
+        },
+        "repotxt.showStatusBarLineCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show total line count of the active file in the status bar."
+        },
+        "repotxt.showStatusBarCharCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show total character count of the active file in the status bar."
+        },
+        "repotxt.showTooltipLineCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show line count in file tooltips."
+        },
+        "repotxt.showTooltipCharCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show character count in file tooltips."
         }
       }
     }

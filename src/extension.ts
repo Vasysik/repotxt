@@ -7,6 +7,8 @@ let treeView: vscode.TreeView<any> | undefined;
 let treeViewProvider: TreeViewProvider | undefined;
 let selectionDecoration: vscode.TextEditorDecorationType;
 let webviewProvider: RepoAnalyzerWebviewProvider | undefined;
+let lineSbItem: vscode.StatusBarItem;
+let charSbItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
@@ -29,8 +31,44 @@ export function activate(context: vscode.ExtensionContext) {
             overviewRulerLane: vscode.OverviewRulerLane.Left
         });
     }
+
+    function createStatusBarItems() {
+        lineSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        charSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+        context.subscriptions.push(lineSbItem, charSbItem);
+    }
+
+    function updateStatusBar(editor?: vscode.TextEditor) {
+        const cfg = vscode.workspace.getConfiguration('repotxt');
+        if (!editor) { 
+            lineSbItem.hide(); 
+            charSbItem.hide(); 
+            return; 
+        }
+
+        const text = editor.document.getText();
+        const lines = editor.document.lineCount;
+        const chars = text.length;
+
+        if (cfg.get('showStatusBarLineCount', true)) {
+            lineSbItem.text = `Ln: ${lines.toLocaleString()}`;
+            lineSbItem.show();
+        } else { 
+            lineSbItem.hide(); 
+        }
+
+        if (cfg.get('showStatusBarCharCount', true)) {
+            charSbItem.text = `Ch: ${chars.toLocaleString()}`;
+            charSbItem.show();
+        } else { 
+            charSbItem.hide(); 
+        }
+    }
     
     selectionDecoration = createSelectionDecoration();
+
+    createStatusBarItems();
+    updateStatusBar(vscode.window.activeTextEditor);
     
     const config = vscode.workspace.getConfiguration('repotxt');
     const interfaceType = config.get<string>('interfaceType', 'treeview');
@@ -173,11 +211,19 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.window.onDidChangeActiveTextEditor(editor => {
             updateEditorDecorations(editor);
+            updateStatusBar(editor);
         }),
         vscode.workspace.onDidChangeTextDocument(event => {
             const editor = vscode.window.activeTextEditor;
             if (editor && editor.document === event.document) {
                 updateEditorDecorations(editor);
+            }
+        }),
+        vscode.workspace.onDidChangeTextDocument(e => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor && editor.document === e.document) {
+                updateEditorDecorations(editor);
+                updateStatusBar(editor);
             }
         }),
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -193,6 +239,10 @@ export function activate(context: vscode.ExtensionContext) {
                             vscode.commands.executeCommand('workbench.action.reloadWindow');
                         }
                     });
+            }
+            if (e.affectsConfiguration('repotxt.showStatusBarLineCount') ||
+                e.affectsConfiguration('repotxt.showStatusBarCharCount')) {
+                updateStatusBar(vscode.window.activeTextEditor);
             }
         })
     );

@@ -58,6 +58,17 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
                 title: 'Open File'
             };
         }
+
+        const cfg = vscode.workspace.getConfiguration('repotxt');
+        if (!isDirectory && !hasPartial) {
+            const stats = this.core.getFileStats(element.fullPath);
+            const parts: string[] = [];
+            if (cfg.get('showTooltipLineCount', true)) parts.push(`${stats.lines.toLocaleString()} lines`);
+            if (cfg.get('showTooltipCharCount', true)) parts.push(`${stats.chars.toLocaleString()} chars`);
+            if (parts.length > 0) {
+                treeItem.tooltip = (treeItem.tooltip ? treeItem.tooltip + ' • ' : '') + parts.join(' • ');
+            }
+        }
         
         return treeItem;
     }

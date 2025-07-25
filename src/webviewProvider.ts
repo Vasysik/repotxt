@@ -37,7 +37,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
-                webviewView.webview.postMessage({ type: 'fullRefresh' });
+                this.updateWebview();
             }
         });
 
@@ -143,7 +143,15 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
     public async updateWebview() {
         if (this._view) {
             const tree = await this._core.getWebviewData();
-            this._view.webview.postMessage({ type: 'fileTree', data: tree });
+            const config = vscode.workspace.getConfiguration('repotxt');
+            this._view.webview.postMessage({ 
+                type: 'fileTree', 
+                data: tree,
+                config: {
+                    showTooltipLineCount: config.get('showTooltipLineCount', true),
+                    showTooltipCharCount: config.get('showTooltipCharCount', true)
+                }
+            });
         }
     }
 
