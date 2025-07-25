@@ -9,6 +9,7 @@ let selectionDecoration: vscode.TextEditorDecorationType;
 let webviewProvider: RepoAnalyzerWebviewProvider | undefined;
 let lineSbItem: vscode.StatusBarItem;
 let charSbItem: vscode.StatusBarItem;
+let filesSbItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
@@ -37,7 +38,9 @@ export function activate(context: vscode.ExtensionContext) {
         lineSbItem.command = 'repotxt.focusView';
         charSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
         charSbItem.command = 'repotxt.focusView';
-        context.subscriptions.push(lineSbItem, charSbItem);
+        filesSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
+        filesSbItem.command = 'repotxt.focusView';
+        context.subscriptions.push(lineSbItem, charSbItem, filesSbItem);
     }
 
     function updateStatusBar() {
@@ -58,6 +61,14 @@ export function activate(context: vscode.ExtensionContext) {
             charSbItem.show();
         } else { 
             charSbItem.hide(); 
+        }
+
+        if (cfg.get('showStatusBarFileCount', true) && stats.files > 0) {
+            filesSbItem.text = `$(files) ${stats.files.toLocaleString()} files`;
+            filesSbItem.tooltip = 'Total files selected';
+            filesSbItem.show();
+        } else { 
+            filesSbItem.hide(); 
         }
     }
     
@@ -238,7 +249,8 @@ export function activate(context: vscode.ExtensionContext) {
                     });
             }
             if (e.affectsConfiguration('repotxt.showStatusBarLineCount') ||
-                e.affectsConfiguration('repotxt.showStatusBarCharCount')) {
+                e.affectsConfiguration('repotxt.showStatusBarCharCount') ||
+                e.affectsConfiguration('repotxt.showStatusBarFileCount')) {
                 updateStatusBar();
             }
         })
