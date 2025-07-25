@@ -60,13 +60,25 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
         }
 
         const cfg = vscode.workspace.getConfiguration('repotxt');
-        if (!isDirectory && !hasPartial) {
+
+        if (isDirectory) {
+            const folderStats = this.core.getFolderStats(element.fullPath);
+            if (folderStats.files > 0) {
+                const parts: string[] = [];
+                if (cfg.get('showTooltipLineCount', true)) parts.push(`${folderStats.lines.toLocaleString()} lines`);
+                if (cfg.get('showTooltipCharCount', true)) parts.push(`${folderStats.chars.toLocaleString()} chars`);
+                if (parts.length > 0) {
+                    parts.push(`${folderStats.files} files`);
+                    treeItem.tooltip = parts.join(' | ');
+                }
+            }
+        } else if (!hasPartial) {
             const stats = this.core.getFileStats(element.fullPath);
             const parts: string[] = [];
             if (cfg.get('showTooltipLineCount', true)) parts.push(`${stats.lines.toLocaleString()} lines`);
             if (cfg.get('showTooltipCharCount', true)) parts.push(`${stats.chars.toLocaleString()} chars`);
             if (parts.length > 0) {
-                treeItem.tooltip = (treeItem.tooltip ? treeItem.tooltip + ' • ' : '') + parts.join(' • ');
+                treeItem.tooltip = (treeItem.tooltip ? treeItem.tooltip + ' | ' : '') + parts.join(' | ');
             }
         }
         

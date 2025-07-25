@@ -557,10 +557,19 @@ export class RepoAnalyzerCore {
                     isDirectory: entry.isDirectory(),
                     excluded: isExcluded,
                     partial: this.hasPartialIncludes(fullPath),
-                    lines: entry.isDirectory() ? 0 : this.getFileStats(fullPath).lines,
-                    chars: entry.isDirectory() ? 0 : this.getFileStats(fullPath).chars,
                     children: entry.isDirectory() ? null : []
                 };
+
+                if (entry.isDirectory()) {
+                    const folderStats = this.getFolderStats(fullPath);
+                    item.folderLines = folderStats.lines;
+                    item.folderChars = folderStats.chars;
+                    item.folderFiles = folderStats.files;
+                } else {
+                    const stats = this.getFileStats(fullPath);
+                    item.lines = stats.lines;
+                    item.chars = stats.chars;
+                }
 
                 result.push(item);
             }
@@ -588,6 +597,117 @@ export class RepoAnalyzerCore {
         } catch { 
             return { lines: 0, chars: 0 }; 
         }
+    }
+
+    public getSelectionStats(): { lines: number; chars: number; files: number } {
+        let totalLines = 0;
+        let totalChars = 0;
+        let filesCount = 0;
+        
+        const processedFiles = new Set<string>();
+        
+        const processPath = (dirPath: string) => {
+            try {
+                const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    
+                    if (entry.isDirectory()) {
+                        if (!this.isPathEffectivelyExcluded(fullPath)) {
+                            processPath(fullPath);
+                        }
+                    } else {
+                        if (!this.isPathEffectivelyExcluded(fullPath) && !processedFiles.has(fullPath)) {
+                            processedFiles.add(fullPath);
+                            const stats = this.getFileStats(fullPath);
+                            
+                            if (this.partialIncludes.has(fullPath)) {
+                                const ranges = this.partialIncludes.get(fullPath)!;
+                                let partialLines = 0;
+                                let partialChars = 0;
+                                
+                                const content = fs.readFileSync(fullPath, 'utf8');
+                                const lines = content.split('\n');
+                                
+                                for (const range of ranges) {
+                                    for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
+                                        if (i >= 0) {
+                                            partialLines++;
+                                            partialChars += lines[i].length + 1;
+                                        }
+                                    }
+                                }
+                                
+                                totalLines += partialLines;
+                                totalChars += partialChars;
+                            } else {
+                                totalLines += stats.lines;
+                                totalChars += stats.chars;
+                            }
+                            filesCount++;
+                        }
+                    }
+                }
+            } catch (e) {}
+        };
+        
+        if (this.workspaceRoot) {
+            processPath(this.workspaceRoot);
+        }
+        
+        return { lines: totalLines, chars: totalChars, files: filesCount };
+    }
+
+    public getFolderStats(folderPath: string): { lines: number; chars: number; files: number } {
+        let totalLines = 0;
+        let totalChars = 0;
+        let filesCount = 0;
+        
+        const processPath = (dirPath: string) => {
+            try {
+                const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    
+                    if (entry.isDirectory()) {
+                        if (!this.isPathEffectivelyExcluded(fullPath)) {
+                            processPath(fullPath);
+                        }
+                    } else if (!this.isPathEffectivelyExcluded(fullPath)) {
+                        const stats = this.getFileStats(fullPath);
+                        if (this.partialIncludes.has(fullPath)) {
+                            const ranges = this.partialIncludes.get(fullPath)!;
+                            let partialLines = 0;
+                            let partialChars = 0;
+                            
+                            try {
+                                const content = fs.readFileSync(fullPath, 'utf8');
+                                const lines = content.split('\n');
+                                
+                                for (const range of ranges) {
+                                    for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
+                                        if (i >= 0) {
+                                            partialLines++;
+                                            partialChars += lines[i].length + 1;
+                                        }
+                                    }
+                                }
+                                
+                                totalLines += partialLines;
+                                totalChars += partialChars;
+                            } catch {}
+                        } else {
+                            totalLines += stats.lines;
+                            totalChars += stats.chars;
+                        }
+                        filesCount++;
+                    }
+                }
+            } catch (e) {}
+        };
+        
+        processPath(folderPath);
+        return { lines: totalLines, chars: totalChars, files: filesCount };
     }
 
     dispose() {

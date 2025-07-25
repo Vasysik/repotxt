@@ -45,7 +45,15 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
             switch (data.type) {
                 case 'getFileTree':
                     const tree = await this._core.getWebviewData();
-                    webviewView.webview.postMessage({ type: 'fileTree', data: tree });
+                    const config = vscode.workspace.getConfiguration('repotxt');
+                    webviewView.webview.postMessage({ 
+                        type: 'fileTree', 
+                        data: tree,
+                        config: {
+                            showTooltipLineCount: config.get('showTooltipLineCount', true),
+                            showTooltipCharCount: config.get('showTooltipCharCount', true)
+                        }
+                    });
                     break;
                 case 'getChildren':
                     const children = await this._core.getWebviewChildren(data.path);

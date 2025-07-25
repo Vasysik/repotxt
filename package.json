@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.3.41",
+  "version": "0.3.42",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -88,6 +88,11 @@
         "command": "repotxt.clearAllSelections",
         "title": "Clear All Selections in Workspace",
         "category": "Repo Analyzer"
+      },
+      {
+        "command": "repotxt.focusView",
+        "title": "Focus Repository Analyzer View",
+        "category": "Repo Analyzer"
       }
     ],
     "menus": {
@@ -100,7 +105,8 @@
         {
           "command": "repotxt.clearSelections",
           "when": "view == repotxt && viewItem == partial",
-          "group": "inline@2"
+          "group": "inline@2",
+          "icon": "$(clear-all)"
         }
       ],
       "view/title": [
@@ -257,12 +263,12 @@
         "repotxt.showStatusBarLineCount": {
           "type": "boolean",
           "default": true,
-          "description": "Show total line count of the active file in the status bar."
+          "description": "Show total line count of selected files in the status bar."
         },
         "repotxt.showStatusBarCharCount": {
           "type": "boolean",
           "default": true,
-          "description": "Show total character count of the active file in the status bar."
+          "description": "Show total character count of selected files in the status bar."
         },
         "repotxt.showTooltipLineCount": {
           "type": "boolean",

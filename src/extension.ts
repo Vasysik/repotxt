@@ -34,31 +34,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     function createStatusBarItems() {
         lineSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        lineSbItem.command = 'repotxt.focusView';
         charSbItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+        charSbItem.command = 'repotxt.focusView';
         context.subscriptions.push(lineSbItem, charSbItem);
     }
 
-    function updateStatusBar(editor?: vscode.TextEditor) {
+    function updateStatusBar() {
         const cfg = vscode.workspace.getConfiguration('repotxt');
-        if (!editor) { 
-            lineSbItem.hide(); 
-            charSbItem.hide(); 
-            return; 
-        }
-
-        const text = editor.document.getText();
-        const lines = editor.document.lineCount;
-        const chars = text.length;
-
-        if (cfg.get('showStatusBarLineCount', true)) {
-            lineSbItem.text = `Ln: ${lines.toLocaleString()}`;
+        const stats = core.getSelectionStats();
+        
+        if (cfg.get('showStatusBarLineCount', true) && stats.lines > 0) {
+            lineSbItem.text = `$(file-text) ${stats.lines.toLocaleString()} lines`;
+            lineSbItem.tooltip = 'Total lines in selected files';
             lineSbItem.show();
         } else { 
             lineSbItem.hide(); 
         }
 
-        if (cfg.get('showStatusBarCharCount', true)) {
-            charSbItem.text = `Ch: ${chars.toLocaleString()}`;
+        if (cfg.get('showStatusBarCharCount', true) && stats.chars > 0) {
+            charSbItem.text = `$(symbol-string) ${stats.chars.toLocaleString()} chars`;
+            charSbItem.tooltip = 'Total characters in selected files';
             charSbItem.show();
         } else { 
             charSbItem.hide(); 
@@ -68,7 +64,7 @@ export function activate(context: vscode.ExtensionContext) {
     selectionDecoration = createSelectionDecoration();
 
     createStatusBarItems();
-    updateStatusBar(vscode.window.activeTextEditor);
+    updateStatusBar();
     
     const config = vscode.workspace.getConfiguration('repotxt');
     const interfaceType = config.get<string>('interfaceType', 'treeview');
@@ -128,6 +124,15 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('repotxt.focusView', () => {
+            const config = vscode.workspace.getConfiguration('repotxt');
+            const interfaceType = config.get<string>('interfaceType', 'treeview');
+            if (interfaceType === 'treeview') {
+                vscode.commands.executeCommand('repotxt.focus');
+            } else {
+                vscode.commands.executeCommand('repotxt.webview.focus');
+            }
+        }),
         vscode.commands.registerCommand('repotxt.refresh', () => {
             core.refresh();
         }),
@@ -211,19 +216,11 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.window.onDidChangeActiveTextEditor(editor => {
             updateEditorDecorations(editor);
-            updateStatusBar(editor);
         }),
         vscode.workspace.onDidChangeTextDocument(event => {
             const editor = vscode.window.activeTextEditor;
             if (editor && editor.document === event.document) {
                 updateEditorDecorations(editor);
-            }
-        }),
-        vscode.workspace.onDidChangeTextDocument(e => {
-            const editor = vscode.window.activeTextEditor;
-            if (editor && editor.document === e.document) {
-                updateEditorDecorations(editor);
-                updateStatusBar(editor);
             }
         }),
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -242,7 +239,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
             if (e.affectsConfiguration('repotxt.showStatusBarLineCount') ||
                 e.affectsConfiguration('repotxt.showStatusBarCharCount')) {
-                updateStatusBar(vscode.window.activeTextEditor);
+                updateStatusBar();
             }
         })
     );
@@ -251,6 +248,7 @@ export function activate(context: vscode.ExtensionContext) {
     
     core.onDidChange(() => {
         updateEditorDecorations(vscode.window.activeTextEditor);
+        updateStatusBar();
     });
 }
 

@@ -480,7 +480,19 @@ function createTreeNode(node, level, parentPath) {
         content.appendChild(badge);
     }
 
-    if (!node.isDirectory && (node.lines !== undefined || node.chars !== undefined)) {
+    if (node.isDirectory && node.folderFiles > 0) {
+        const parts = [];
+        if (currentConfig.showTooltipLineCount && node.folderLines !== undefined) {
+            parts.push(`${node.folderLines.toLocaleString()} lines`);
+        }
+        if (currentConfig.showTooltipCharCount && node.folderChars !== undefined) {
+            parts.push(`${node.folderChars.toLocaleString()} chars`);
+        }
+        if (parts.length > 0) {
+            parts.push(`${node.folderFiles} files`);
+            nodeElement.title = parts.join(' | ');
+        }
+    } else if (!node.isDirectory && (node.lines !== undefined || node.chars !== undefined)) {
         const parts = [];
         if (currentConfig.showTooltipLineCount && node.lines !== undefined) {
             parts.push(`${node.lines.toLocaleString()} lines`);
@@ -489,7 +501,7 @@ function createTreeNode(node, level, parentPath) {
             parts.push(`${node.chars.toLocaleString()} chars`);
         }
         if (parts.length > 0) {
-            nodeElement.title = parts.join(' • ');
+            nodeElement.title = parts.join(' | ');
         }
     }
 
