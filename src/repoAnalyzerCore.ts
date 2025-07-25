@@ -316,13 +316,27 @@ export class RepoAnalyzerCore {
 
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
-            if (this.isPathVisuallyExcluded(fullPath)) continue;
-
-            const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
-            structureList.push(relativePath + (entry.isDirectory() ? '/' : ''));
 
             if (entry.isDirectory()) {
-                await this.getFlatStructure(fullPath, structureList);
+                const dirExcluded   = this.isPathVisuallyExcluded(fullPath);
+                const hasIncludes   = this.folderContainsManualIncludes(fullPath);
+                const hasPartials   = this.folderContainsPartialIncludes(fullPath);
+
+                if (!dirExcluded) {
+                    const relDir = path.relative(this.workspaceRoot!, fullPath)
+                                    .split(path.sep).join(path.posix.sep) + '/';
+                    structureList.push(relDir);
+                }
+
+                if (!dirExcluded || hasIncludes || hasPartials) {
+                    await this.getFlatStructure(fullPath, structureList);
+                }
+            } else {
+                if (this.isPathVisuallyExcluded(fullPath)) continue;
+
+                const relFile = path.relative(this.workspaceRoot!, fullPath)
+                                .split(path.sep).join(path.posix.sep);
+                structureList.push(relFile);
             }
         }
     }
@@ -333,12 +347,19 @@ export class RepoAnalyzerCore {
 
         for (const entry of entries) {
             const fullPath = path.join(dirPath, entry.name);
-            if (this.isPathEffectivelyExcluded(fullPath)) continue;
-
+            
             if (entry.isDirectory()) {
-                const subResults = await this.generateFileContentBlocks(fullPath);
-                results.push(...subResults);
+                const dirExcluded = this.isPathEffectivelyExcluded(fullPath);
+                const hasIncludes = this.folderContainsManualIncludes(fullPath);
+                const hasPartials = this.folderContainsPartialIncludes(fullPath);
+
+                if (!dirExcluded || hasIncludes || hasPartials) {
+                    const sub = await this.generateFileContentBlocks(fullPath);
+                    results.push(...sub);
+                }
             } else {
+                if (this.isPathEffectivelyExcluded(fullPath)) continue;
+
                 const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
                 const ranges = this.partialIncludes.get(fullPath);
                 
