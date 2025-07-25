@@ -566,7 +566,9 @@ export class RepoAnalyzerCore {
                     item.folderChars = folderStats.chars;
                     item.folderFiles = folderStats.files;
                 } else {
-                    const stats = this.getFileStats(fullPath);
+                    const stats = this.hasPartialIncludes(fullPath)
+                        ? this.getFileStatsWithPartial(fullPath)
+                        : this.getFileStats(fullPath);
                     item.lines = stats.lines;
                     item.chars = stats.chars;
                 }
@@ -716,6 +718,34 @@ export class RepoAnalyzerCore {
         }
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
+        }
+    }
+
+    public getFileStatsWithPartial(fullPath: string): { lines: number; chars: number } {
+        const ranges = this.partialIncludes.get(fullPath)
+        if (!ranges || ranges.length === 0) {
+            return this.getFileStats(fullPath)
+        }
+        
+        try {
+            const content = fs.readFileSync(fullPath, 'utf8')
+            const lines = content.split('\n')
+            let partialLines = 0
+            let partialChars = 0
+            
+            const mergedRanges = this.mergeRanges(ranges)
+            for (const range of mergedRanges) {
+                for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
+                    if (i >= 0) {
+                        partialLines++
+                        partialChars += lines[i].length + 1
+                    }
+                }
+            }
+            
+            return { lines: partialLines, chars: partialChars }
+        } catch {
+            return { lines: 0, chars: 0 }
         }
     }
 }

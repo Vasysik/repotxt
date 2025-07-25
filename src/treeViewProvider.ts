@@ -72,8 +72,10 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
                     treeItem.tooltip = parts.join(' | ');
                 }
             }
-        } else if (!hasPartial) {
-            const stats = this.core.getFileStats(element.fullPath);
+        } else {
+            const stats = hasPartial 
+                ? this.core.getFileStatsWithPartial(element.fullPath)
+                : this.core.getFileStats(element.fullPath);
             const parts: string[] = [];
             if (cfg.get('showTooltipLineCount', true)) parts.push(`${stats.lines.toLocaleString()} lines`);
             if (cfg.get('showTooltipCharCount', true)) parts.push(`${stats.chars.toLocaleString()} chars`);
