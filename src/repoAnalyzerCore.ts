@@ -700,4 +700,15 @@ export class RepoAnalyzerCore {
             return { lines: 0, chars: 0 }
         }
     }
+
+    public getStatsForPath(p: string): any {
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+            const f = this.getFolderStats(p)
+            return { type: 'dir', lines: f.lines, chars: f.chars, files: f.files }
+        }
+        const s = this.hasPartialIncludes(p)
+            ? this.getFileStatsWithPartial(p)
+            : this.getFileStats(p)
+        return { type: 'file', lines: s.lines, chars: s.chars }
+    }
 }

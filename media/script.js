@@ -130,8 +130,29 @@ window.addEventListener('message', event => {
         vscode.postMessage({ type: 'getFileTree' });
     } else if (message.type === 'clearPathCache') {
         clearCacheForPath(message.path);
+    } else if (message.type === 'statsUpdate') {
+        message.list.forEach(({ path, stats }) => applyStats(path, stats))
     }
 });
+
+function applyStats(nodePath, stats){
+    const node = domMap.get(nodePath)
+    if(!node) return
+    const elem = node.parentElement
+
+    if(stats.type === 'file'){
+        const parts=[]
+        if(currentConfig.showTooltipLineCount)  parts.push(`${stats.lines.toLocaleString()} lines`)
+        if(currentConfig.showTooltipCharCount)  parts.push(`${stats.chars.toLocaleString()} chars`)
+        elem.title = parts.join(' | ')
+    }else{
+        const parts=[]
+        if(currentConfig.showTooltipLineCount)  parts.push(`${stats.lines.toLocaleString()} lines`)
+        if(currentConfig.showTooltipCharCount)  parts.push(`${stats.chars.toLocaleString()} chars`)
+        parts.push(`${stats.files} files`)
+        elem.title = parts.join(' | ')
+    }
+}
 
 function updateNodeStates(states) {
     const stateMap = new Map(states.map(s => [s.path, { excluded: s.excluded, partial: s.partial }]));

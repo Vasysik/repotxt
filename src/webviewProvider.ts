@@ -18,11 +18,19 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
             }
         });
         this._core.onDidUpdatePartial((filePath) => {
-            if (this._view) {
-                this._view.webview.postMessage({ type: 'clearPathCache', path: filePath });
-                this.updateWebview();
+            if (!this._view) return
+
+            const payload:any[] = [ { path: filePath, stats: this._core.getStatsForPath(filePath) } ]
+            
+            let cur = path.dirname(filePath)
+            const root = this._core.getWorkspaceRoot() ?? ''
+            while (cur && cur.startsWith(root) && cur !== path.dirname(cur)) {
+                payload.push({ path: cur, stats: this._core.getStatsForPath(cur) })
+                cur = path.dirname(cur)
             }
-        });
+
+            this._view.webview.postMessage({ type: 'statsUpdate', list: payload })
+        })
     }
 
     public resolveWebviewView(
