@@ -17,6 +17,12 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                 this._view.webview.postMessage({ type: 'nodeStates', states: nodes });
             }
         });
+        this._core.onDidUpdatePartial((filePath) => {
+            if (this._view) {
+                this._view.webview.postMessage({ type: 'clearPathCache', path: filePath });
+                this.updateWebview();
+            }
+        });
     }
 
     public resolveWebviewView(
@@ -44,7 +50,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async data => {
             switch (data.type) {
                 case 'getFileTree':
-                    const tree = await this._core.getWebviewData();
+                    const tree = await this.getWebviewData();
                     const config = vscode.workspace.getConfiguration('repotxt');
                     webviewView.webview.postMessage({ 
                         type: 'fileTree', 
@@ -56,7 +62,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     });
                     break;
                 case 'getChildren':
-                    const children = await this._core.getWebviewChildren(data.path);
+                    const children = await this.getWebviewChildren(data.path);
                     webviewView.webview.postMessage({ type: 'children', path: data.path, data: children });
                     break;
                 case 'getNodeStates':
@@ -91,6 +97,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     } else {
                         this._core.clearRanges(data.path);
                     }
+                    this.updateWebview();
                     break;
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');
@@ -150,7 +157,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
     public async updateWebview() {
         if (this._view) {
-            const tree = await this._core.getWebviewData();
+            const tree = await this.getWebviewData();
             const config = vscode.workspace.getConfiguration('repotxt');
             this._view.webview.postMessage({ 
                 type: 'fileTree', 
@@ -160,6 +167,60 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     showTooltipCharCount: config.get('showTooltipCharCount', true)
                 }
             });
+        }
+    }
+
+    async getWebviewData(): Promise<any[]> {
+        if (!this._core.getWorkspaceRoot()) return [];
+        return this.getWebviewFileTree(this._core.getWorkspaceRoot()!, 0, 0);
+    }
+
+    async getWebviewChildren(directoryPath: string): Promise<any[]> {
+        return this.getWebviewFileTree(directoryPath, 0, 0);
+    }
+
+    private async getWebviewFileTree(directoryPath: string, depth: number = 0, maxDepth: number = 0): Promise<any[]> {
+        if (depth > maxDepth) return [];
+        
+        try {
+            const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+                .sort((a, b) => {
+                    const aIsDir = a.isDirectory() ? 0 : 1;
+                    const bIsDir = b.isDirectory() ? 0 : 1;
+                    return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
+                });
+
+            const result = [];
+            for (const entry of entries) {
+                const fullPath = path.join(directoryPath, entry.name);
+                const isExcluded = this._core.isPathVisuallyExcluded(fullPath);
+                const item: any = {
+                    name: entry.name,
+                    fullPath: fullPath,
+                    isDirectory: entry.isDirectory(),
+                    excluded: isExcluded,
+                    partial: this._core.hasPartialIncludes(fullPath),
+                    children: entry.isDirectory() ? null : []
+                };
+
+                if (entry.isDirectory()) {
+                    const folderStats = this._core.getFolderStats(fullPath);
+                    item.folderLines = folderStats.lines;
+                    item.folderChars = folderStats.chars;
+                    item.folderFiles = folderStats.files;
+                } else {
+                    const stats = this._core.hasPartialIncludes(fullPath)
+                        ? this._core.getFileStatsWithPartial(fullPath)
+                        : this._core.getFileStats(fullPath);
+                    item.lines = stats.lines;
+                    item.chars = stats.chars;
+                }
+
+                result.push(item);
+            }
+            return result;
+        } catch (error) {
+            return [];
         }
     }
 

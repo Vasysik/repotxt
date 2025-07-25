@@ -128,6 +128,8 @@ window.addEventListener('message', event => {
         clearAllCaches();
         isInitialLoad = true;
         vscode.postMessage({ type: 'getFileTree' });
+    } else if (message.type === 'clearPathCache') {
+        clearCacheForPath(message.path);
     }
 });
 

@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.3.44",
+  "version": "0.3.47",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -82,7 +82,8 @@
       {
         "command": "repotxt.clearSelections",
         "title": "Clear Selections for Current File",
-        "category": "Repo Analyzer"
+        "category": "Repo Analyzer",
+        "icon": "$(clear-all)"
       },
       {
         "command": "repotxt.clearAllSelections",
@@ -105,8 +106,7 @@
         {
           "command": "repotxt.clearSelections",
           "when": "view == repotxt && viewItem == partial",
-          "group": "inline@2",
-          "icon": "$(clear-all)"
+          "group": "inline@2"
         }
       ],
       "view/title": [

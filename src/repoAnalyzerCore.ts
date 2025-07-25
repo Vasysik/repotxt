@@ -35,6 +35,9 @@ export class RepoAnalyzerCore {
     private _onDidUpdateNodes = new vscode.EventEmitter<NodeState[]>();
     readonly onDidUpdateNodes = this._onDidUpdateNodes.event;
     
+    private _onDidUpdatePartial = new vscode.EventEmitter<string>();
+    readonly onDidUpdatePartial = this._onDidUpdatePartial.event;
+    
     private refreshTimeout: NodeJS.Timeout | undefined;
 
     constructor(private context: vscode.ExtensionContext) {
@@ -469,12 +472,13 @@ export class RepoAnalyzerCore {
         
         this.partialIncludes.set(filePath, mergedRanges);
         this.saveState();
-        this.refresh();
         this._onDidUpdateNodes.fire([{
             path: filePath,
             excluded: this.isPathVisuallyExcluded(filePath),
             partial: true
         }]);
+        this._onDidUpdatePartial.fire(filePath);
+        this.refresh();
     }
 
     removeRanges(filePath: string, selections: readonly vscode.Selection[]): void {
@@ -498,23 +502,25 @@ export class RepoAnalyzerCore {
         }
         
         this.saveState();
-        this.refresh();
         this._onDidUpdateNodes.fire([{
             path: filePath,
             excluded: this.isPathVisuallyExcluded(filePath),
             partial: this.hasPartialIncludes(filePath)
         }]);
+        this._onDidUpdatePartial.fire(filePath);
+        this.refresh();
     }
 
     clearRanges(filePath: string): void {
         this.partialIncludes.delete(filePath);
         this.saveState();
-        this.refresh();
         this._onDidUpdateNodes.fire([{
             path: filePath,
             excluded: this.isPathVisuallyExcluded(filePath),
             partial: false
         }]);
+        this._onDidUpdatePartial.fire(filePath);
+        this.refresh();
     }
 
     clearAllRanges(): void {
@@ -529,60 +535,6 @@ export class RepoAnalyzerCore {
 
     getPartialRanges(filePath: string): Range[] | undefined {
         return this.partialIncludes.get(filePath);
-    }
-
-    async getWebviewData(): Promise<any[]> {
-        if (!this.workspaceRoot) return [];
-        return this.getWebviewFileTree(this.workspaceRoot, 0, 0);
-    }
-
-    private async getWebviewFileTree(directoryPath: string, depth: number = 0, maxDepth: number = 0): Promise<any[]> {
-        if (depth > maxDepth) return [];
-        
-        try {
-            const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
-                .sort((a, b) => {
-                    const aIsDir = a.isDirectory() ? 0 : 1;
-                    const bIsDir = b.isDirectory() ? 0 : 1;
-                    return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
-                });
-
-            const result = [];
-            for (const entry of entries) {
-                const fullPath = path.join(directoryPath, entry.name);
-                const isExcluded = this.isPathVisuallyExcluded(fullPath);
-                const item: any = {
-                    name: entry.name,
-                    fullPath: fullPath,
-                    isDirectory: entry.isDirectory(),
-                    excluded: isExcluded,
-                    partial: this.hasPartialIncludes(fullPath),
-                    children: entry.isDirectory() ? null : []
-                };
-
-                if (entry.isDirectory()) {
-                    const folderStats = this.getFolderStats(fullPath);
-                    item.folderLines = folderStats.lines;
-                    item.folderChars = folderStats.chars;
-                    item.folderFiles = folderStats.files;
-                } else {
-                    const stats = this.hasPartialIncludes(fullPath)
-                        ? this.getFileStatsWithPartial(fullPath)
-                        : this.getFileStats(fullPath);
-                    item.lines = stats.lines;
-                    item.chars = stats.chars;
-                }
-
-                result.push(item);
-            }
-            return result;
-        } catch (error) {
-            return [];
-        }
-    }
-
-    async getWebviewChildren(directoryPath: string): Promise<any[]> {
-        return this.getWebviewFileTree(directoryPath, 0, 0);
     }
 
     getWorkspaceRoot(): string | undefined {
