@@ -127,7 +127,7 @@ window.addEventListener('message', event => {
         fileTreeData = null;
         clearAllCaches();
         isInitialLoad = true;
-        vscode.postMessage({ type: 'getFileTree' });
+        vscode.postMessage({ type: 'refresh' });
     } else if (message.type === 'clearPathCache') {
         clearCacheForPath(message.path);
     } else if (message.type === 'statsUpdate') {

@@ -584,7 +584,7 @@ export class RepoAnalyzerCore {
                     const fullPath = path.join(dirPath, entry.name);
                     
                     if (entry.isDirectory()) {
-                        if (!this.isPathEffectivelyExcluded(fullPath)) {
+                        if (!this.isPathVisuallyExcluded(fullPath)) {
                             processPath(fullPath);
                         }
                     } else {
