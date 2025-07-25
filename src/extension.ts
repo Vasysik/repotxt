@@ -91,6 +91,12 @@ export function activate(context: vscode.ExtensionContext) {
         });
         
         treeViewProvider.setTreeView(treeView);
+
+        treeView.onDidChangeVisibility(e => {
+            if (e.visible) {
+                core.refresh();
+            }
+        });
         
         context.subscriptions.push(
             vscode.commands.registerCommand('repotxt.toggleExclude', (item: any) => {

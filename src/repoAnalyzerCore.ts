@@ -553,6 +553,23 @@ export class RepoAnalyzerCore {
         }
     }
 
+    private countVisiblePaths(): number {
+        let cnt = 0;
+        const walk = (dir: string) => {
+            fs.readdirSync(dir,{withFileTypes:true}).forEach(e=>{
+                const p = path.join(dir,e.name);
+                if(this.isPathVisuallyExcluded(p)) return;
+                cnt++;
+                if(e.isDirectory()) walk(p);
+            });
+        };
+        if (this.workspaceRoot) walk(this.workspaceRoot);
+        return cnt;
+    }
+    private structureCharTotal(lines: number): number {
+        return lines ? lines * 2 + lines : 0;
+    }
+
     public getSelectionStats(): { lines: number; chars: number; files: number } {
         let totalLines = 0;
         let totalChars = 0;
@@ -608,6 +625,27 @@ export class RepoAnalyzerCore {
         if (this.workspaceRoot) {
             processPath(this.workspaceRoot);
         }
+
+        const cfg = vscode.workspace.getConfiguration('repotxt');
+        
+        if (cfg.get<boolean>('aiStyle', false)) {
+            const prompt = cfg.get<string>('aiPrompt', '');
+            totalLines += prompt.split('\n').length + 2;
+            totalChars += prompt.length + 2;
+        }
+
+        if (this.workspaceRoot) {
+            const fsHeader = `Folder Structure: ${path.basename(this.workspaceRoot)}`;
+            totalLines += 1;
+            totalChars += fsHeader.length + 1;
+        }
+
+        const structCount = this.countVisiblePaths();
+        totalLines += structCount;
+        totalChars += this.structureCharTotal(structCount);
+
+        totalLines += filesCount * 2;
+        totalChars += filesCount * 8;
         
         return { lines: totalLines, chars: totalChars, files: filesCount };
     }

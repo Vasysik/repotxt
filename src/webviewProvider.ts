@@ -21,7 +21,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
             if (!this._view) return
 
             const payload:any[] = [ { path: filePath, stats: this._core.getStatsForPath(filePath) } ]
-            
+
             let cur = path.dirname(filePath)
             const root = this._core.getWorkspaceRoot() ?? ''
             while (cur && cur.startsWith(root) && cur !== path.dirname(cur)) {
@@ -51,7 +51,10 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
-                this.updateWebview();
+                this._core.refresh();
+                if (this._view) {
+                    this._view.webview.postMessage({ type: 'fullRefresh' });
+                }
             }
         });
 
