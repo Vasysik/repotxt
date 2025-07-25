@@ -248,10 +248,15 @@ export class RepoAnalyzerCore {
             if (isDir) this.manualIncludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualIncludes.delete(p); });
         }
         this.saveState();
+        
+        this.updateParentStats(fullPath);
+        
         this.refresh();
     }
 
     toggleExcludeMultiple(fullPaths: string[]): void {
+        const affectedParents = new Set<string>();
+        
         fullPaths.forEach(fullPath => {
             const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
             const fullPathWithSep = isDir ? fullPath + path.sep : fullPath;
@@ -267,9 +272,34 @@ export class RepoAnalyzerCore {
                 this.addPathToSet(fullPath, this.manualExcludes);
                 if (isDir) this.manualIncludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualIncludes.delete(p); });
             }
+            
+            let parent = path.dirname(fullPath);
+            while (parent && parent !== this.workspaceRoot && parent !== path.dirname(parent)) {
+                affectedParents.add(parent);
+                parent = path.dirname(parent);
+            }
         });
+        
         this.saveState();
+        
+        affectedParents.forEach(parent => this.updateParentStats(parent));
+        
         this.refresh();
+    }
+
+    private updateParentStats(childPath: string): void {
+        const payload: any[] = [];
+        let current = path.dirname(childPath);
+        const root = this.workspaceRoot ?? '';
+        
+        while (current && current.startsWith(root) && current !== path.dirname(current)) {
+            payload.push({ path: current, stats: this.getStatsForPath(current) });
+            current = path.dirname(current);
+        }
+        
+        if (payload.length > 0) {
+            this._onDidUpdatePartial.fire(childPath);
+        }
     }
 
     private folderContainsManualIncludes(dirPath: string): boolean {
@@ -389,8 +419,13 @@ export class RepoAnalyzerCore {
             
             const mergedRanges = this.mergeRanges(ranges);
             for (const range of mergedRanges) {
-                for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
-                    if (i >= 0) selectedLines.push(lines[i]);
+                const validStart = Math.max(0, range.start - 1);
+                const validEnd = Math.min(range.end, lines.length);
+                
+                for (let i = validStart; i < validEnd; i++) {
+                    if (i >= 0 && i < lines.length) {
+                        selectedLines.push(lines[i]);
+                    }
                 }
             }
             
@@ -600,9 +635,13 @@ export class RepoAnalyzerCore {
                                 const content = fs.readFileSync(fullPath, 'utf8');
                                 const lines = content.split('\n');
                                 
-                                for (const range of ranges) {
-                                    for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
-                                        if (i >= 0) {
+                                const mergedRanges = this.mergeRanges(ranges);
+                                for (const range of mergedRanges) {
+                                    const validStart = Math.max(0, range.start - 1);
+                                    const validEnd = Math.min(range.end, lines.length);
+                                    
+                                    for (let i = validStart; i < validEnd; i++) {
+                                        if (i >= 0 && i < lines.length) {
                                             partialLines++;
                                             partialChars += lines[i].length + 1;
                                         }
@@ -725,8 +764,11 @@ export class RepoAnalyzerCore {
             
             const mergedRanges = this.mergeRanges(ranges)
             for (const range of mergedRanges) {
-                for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
-                    if (i >= 0) {
+                const validStart = Math.max(0, range.start - 1);
+                const validEnd = Math.min(range.end, lines.length);
+                
+                for (let i = validStart; i < validEnd; i++) {
+                    if (i >= 0 && i < lines.length) {
                         partialLines++
                         partialChars += lines[i].length + 1
                     }
