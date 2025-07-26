@@ -15,6 +15,21 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### Performance
 - Removed global `innerHTML = ''`; only affected nodes are touched, eliminating blink and reducing GC pressure.
 
+## [0.4.0] – 2025-07-27
+
+### Added
+
+- **Partial File Selection for Reports**  
+  You can now include only specific parts of files in the report, not just whole files.
+  - Select any lines in the editor and use the "Add Selection to Report" command (or right-click context menu).
+  - Files with partial selections are marked with a special badge in the tree; you can clear selections for a file with one click.
+  - The generated report now shows the selected line ranges for such files.
+
+- **Line and Character Counters**  
+  - The status bar now displays the total number of lines, characters, and files that will be included in the report (taking exclusions and partial selections into account).
+  - Tooltips for files and folders show line, character, and file counts (all stats respect exclusions and partial selections).
+  - For partially included files and folders, stats are calculated only for the selected ranges.
+
 ## [0.3.0] - 2025-07-23
 
 ### Added

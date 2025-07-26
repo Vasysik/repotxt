@@ -289,6 +289,11 @@ export class RepoAnalyzerCore {
 
     private updateParentStats(childPath: string): void {
         const payload: any[] = [];
+        
+        if (fs.existsSync(childPath) && fs.statSync(childPath).isDirectory()) {
+            payload.push({ path: childPath, stats: this.getStatsForPath(childPath) });
+        }
+        
         let current = path.dirname(childPath);
         const root = this.workspaceRoot ?? '';
         
@@ -298,7 +303,15 @@ export class RepoAnalyzerCore {
         }
         
         if (payload.length > 0) {
-            this._onDidUpdatePartial.fire(childPath);
+            this._onDidUpdateNodes.fire(payload.map(item => ({
+                path: item.path,
+                excluded: this.isPathVisuallyExcluded(item.path),
+                partial: this.hasPartialIncludes(item.path)
+            })));
+            
+            payload.forEach(item => {
+                this._onDidUpdatePartial.fire(item.path);
+            });
         }
     }
 
@@ -701,37 +714,42 @@ export class RepoAnalyzerCore {
                     const fullPath = path.join(dirPath, entry.name);
                     
                     if (entry.isDirectory()) {
-                        if (!this.isPathEffectivelyExcluded(fullPath)) {
+                        if (!this.isPathVisuallyExcluded(fullPath)) {
                             processPath(fullPath);
                         }
-                    } else if (!this.isPathEffectivelyExcluded(fullPath)) {
-                        const stats = this.getFileStats(fullPath);
-                        if (this.partialIncludes.has(fullPath)) {
-                            const ranges = this.partialIncludes.get(fullPath)!;
-                            let partialLines = 0;
-                            let partialChars = 0;
-                            
-                            try {
-                                const content = fs.readFileSync(fullPath, 'utf8');
-                                const lines = content.split('\n');
+                    } else {
+                        if (!this.isPathEffectivelyExcluded(fullPath)) {
+                            const stats = this.getFileStats(fullPath);
+                            if (this.partialIncludes.has(fullPath)) {
+                                const ranges = this.partialIncludes.get(fullPath)!;
+                                let partialLines = 0;
+                                let partialChars = 0;
                                 
-                                for (const range of ranges) {
-                                    for (let i = range.start - 1; i < Math.min(range.end, lines.length); i++) {
-                                        if (i >= 0) {
-                                            partialLines++;
-                                            partialChars += lines[i].length + 1;
+                                try {
+                                    const content = fs.readFileSync(fullPath, 'utf8');
+                                    const lines = content.split('\n');
+                                    
+                                    for (const range of ranges) {
+                                        const validStart = Math.max(0, range.start - 1);
+                                        const validEnd = Math.min(range.end, lines.length);
+                                        
+                                        for (let i = validStart; i < validEnd; i++) {
+                                            if (i >= 0 && i < lines.length) {
+                                                partialLines++;
+                                                partialChars += lines[i].length + 1;
+                                            }
                                         }
                                     }
-                                }
-                                
-                                totalLines += partialLines;
-                                totalChars += partialChars;
-                            } catch {}
-                        } else {
-                            totalLines += stats.lines;
-                            totalChars += stats.chars;
+                                    
+                                    totalLines += partialLines;
+                                    totalChars += partialChars;
+                                } catch {}
+                            } else {
+                                totalLines += stats.lines;
+                                totalChars += stats.chars;
+                            }
+                            filesCount++;
                         }
-                        filesCount++;
                     }
                 }
             } catch (e) {}

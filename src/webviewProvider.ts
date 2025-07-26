@@ -15,6 +15,12 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         this._core.onDidUpdateNodes((nodes) => {
             if (this._view) {
                 this._view.webview.postMessage({ type: 'nodeStates', states: nodes });
+                
+                const statsPayload = nodes.map(node => ({
+                    path: node.path,
+                    stats: this._core.getStatsForPath(node.path)
+                }));
+                this._view.webview.postMessage({ type: 'statsUpdate', list: statsPayload });
             }
         });
         this._core.onDidUpdatePartial((filePath) => {
