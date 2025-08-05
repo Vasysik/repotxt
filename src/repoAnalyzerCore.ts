@@ -138,7 +138,12 @@ export class RepoAnalyzerCore {
         if (!this.workspaceRoot) return;
         for (const pattern of patterns) {
             try {
-                const globPattern = pattern.endsWith('/') ? `${pattern}**` : pattern;
+                let globPattern = pattern
+                if (pattern.endsWith('/')) {
+                    globPattern = `**/${pattern}**`
+                } else if (!pattern.includes('/') && !pattern.startsWith('**/')) {
+                    globPattern = `**/${pattern}`
+                }
                 const matches = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
                 matches.forEach(uri => this.addPathToSet(uri.fsPath, this.autoExcludes));
             } catch (error) {/* Ignore */}

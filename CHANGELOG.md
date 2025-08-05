@@ -4,18 +4,12 @@ All notable changes to the "repotxt" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [0.3.9] – 2025-07-30
+## [0.4.2] - 2025-08-05
 
-### Changed
-- `media/script.js`
-  - Switched from full tree re-render to targeted DOM updates.
-  - Separated caches for structure vs. state; smoother UI with large repos.
-  - Refactored `updateExpandedStates()` and `toggleNode()` to use the new helper and avoid duplicate code.
+### Fixed
+- **Auto-exclude patterns**: Fixed a critical bug where patterns like `*.vsix` would only exclude files in the workspace root, but not in subdirectories. Patterns now correctly match throughout the entire repository structure.
 
-### Performance
-- Removed global `innerHTML = ''`; only affected nodes are touched, eliminating blink and reducing GC pressure.
-
-## [0.4.0] – 2025-07-27
+## [0.4.0] – 2025-07-30
 
 ### Added
 
@@ -29,6 +23,17 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   - The status bar now displays the total number of lines, characters, and files that will be included in the report (taking exclusions and partial selections into account).
   - Tooltips for files and folders show line, character, and file counts (all stats respect exclusions and partial selections).
   - For partially included files and folders, stats are calculated only for the selected ranges.
+
+## [0.3.9] – 2025-07-27
+
+### Changed
+- `media/script.js`
+  - Switched from full tree re-render to targeted DOM updates.
+  - Separated caches for structure vs. state; smoother UI with large repos.
+  - Refactored `updateExpandedStates()` and `toggleNode()` to use the new helper and avoid duplicate code.
+
+### Performance
+- Removed global `innerHTML = ''`; only affected nodes are touched, eliminating blink and reducing GC pressure.
 
 ## [0.3.0] - 2025-07-23
 
