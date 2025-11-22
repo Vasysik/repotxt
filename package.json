@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -163,8 +163,21 @@
         },
         "repotxt.autoExcludePatterns": {
           "type": "array",
-          "default": ["node_modules", ".git", "dist", "build", "out", "coverage", ".env", "*.log", "package-lock.json", "yarn.lock"],
-          "items": { "type": "string" },
+          "default": [
+            "node_modules",
+            ".git",
+            "dist",
+            "build",
+            "out",
+            "coverage",
+            ".env",
+            "*.log",
+            "package-lock.json",
+            "yarn.lock"
+          ],
+          "items": {
+            "type": "string"
+          },
           "description": "Patterns to automatically exclude from the repository analysis."
         },
         "repotxt.respectIgnoreFiles": {
@@ -174,8 +187,12 @@
         },
         "repotxt.ignoreFileNames": {
           "type": "array",
-          "default": [".gitignore"],
-          "items": { "type": "string" },
+          "default": [
+            ".gitignore"
+          ],
+          "items": {
+            "type": "string"
+          },
           "description": "List of filenames to treat as ignore files."
         },
         "repotxt.excludeBinaryFiles": {
@@ -192,7 +209,9 @@
             ".woff", ".woff2", ".eot", ".ttf", ".otf", 
             ".class", ".jar", ".pyc", ".pyo", ".db", ".sqlite", ".sqlite3"
           ],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "List of file extensions to be considered binary and automatically excluded."
         },
         "repotxt.checkFileSize": {
@@ -209,17 +228,6 @@
           "type": "number",
           "default": 10485760,
           "description": "Maximum size of the generated report in characters (default ~10MB). Prevents VS Code from crashing on massive reports."
-        },
-        "repotxt.useSmartWatcher": {
-          "type": "boolean",
-          "default": true,
-          "description": "Ignore changes in specific folders (like node_modules) to improve performance."
-        },
-        "repotxt.watcherExcludes": {
-          "type": "array",
-          "default": ["node_modules", ".git", "dist", "out", "build", ".vsix", ".log"],
-          "items": { "type": "string" },
-          "description": "List of path segments. If a file path contains any of these, changes to it won't trigger an auto-refresh."
         },
         "repotxt.aiStyle": {
           "type": "boolean",

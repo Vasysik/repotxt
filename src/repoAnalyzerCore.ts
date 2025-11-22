@@ -55,7 +55,6 @@ export class RepoAnalyzerCore {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('repotxt')) {
                 this.recalculateAutoExclusions().then(() => {
-                    this.setupFileWatcher();
                     this.refresh();
                 });
             }
@@ -175,30 +174,20 @@ export class RepoAnalyzerCore {
         if (this.workspaceRoot) {
             this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
             
-            const handleFileChange = (uri: vscode.Uri) => {
-                const config = vscode.workspace.getConfiguration('repotxt');
-                
-                if (config.get('useSmartWatcher', true)) {
-                    const excludes = config.get<string[]>('watcherExcludes', []);
-                    const fsPath = uri.fsPath;
-                    if (excludes.some(ex => fsPath.includes(ex))) {
-                        return;
-                    }
-                }
-                
-                this.fileStatsCache.delete(uri.fsPath);
-                this.validateRanges(uri.fsPath);
+            const handleEvent = (uri: vscode.Uri, type: 'create' | 'change' | 'delete') => {
+                const fsPath = uri.fsPath;
+                if (type === 'change' && this.isPathEffectivelyExcluded(fsPath)) { return; }
+                this.fileStatsCache.delete(fsPath);
+                this.validateRanges(fsPath);
                 this.debouncedRefresh();
             };
 
-            this.fileWatcher.onDidCreate((uri) => {
-                handleFileChange(uri);
-            });
-            this.fileWatcher.onDidDelete(() => this.debouncedRefresh());
-            this.fileWatcher.onDidChange(handleFileChange);
+            this.fileWatcher.onDidCreate((uri) => handleEvent(uri, 'create'));
+            this.fileWatcher.onDidDelete((uri) => handleEvent(uri, 'delete'));
+            this.fileWatcher.onDidChange((uri) => handleEvent(uri, 'change'));
         }
     }
-
+    
     private validateRanges(filePath: string) {
         const ranges = this.partialIncludes.get(filePath);
         if (!ranges || ranges.length === 0) return;
@@ -228,9 +217,8 @@ export class RepoAnalyzerCore {
             clearTimeout(this.refreshTimeout);
         }
         this.refreshTimeout = setTimeout(async () => {
-            // Auto-update logic
             this.refresh();
-        }, 300); // 300ms is responsive enough
+        }, 300);
     }
 
     public isPathEffectivelyExcluded(fullPath: string): boolean {
