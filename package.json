@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -163,21 +163,8 @@
         },
         "repotxt.autoExcludePatterns": {
           "type": "array",
-          "default": [
-            "node_modules",
-            ".git",
-            "dist",
-            "build",
-            "out",
-            "coverage",
-            ".env",
-            "*.log",
-            "package-lock.json",
-            "yarn.lock"
-          ],
-          "items": {
-            "type": "string"
-          },
+          "default": ["node_modules", ".git", "dist", "build", "out", "coverage", ".env", "*.log", "package-lock.json", "yarn.lock"],
+          "items": { "type": "string" },
           "description": "Patterns to automatically exclude from the repository analysis."
         },
         "repotxt.respectIgnoreFiles": {
@@ -187,13 +174,9 @@
         },
         "repotxt.ignoreFileNames": {
           "type": "array",
-          "default": [
-            ".gitignore"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "description": "List of filenames to treat as ignore files (e.g., .gitignore, .dockerignore)."
+          "default": [".gitignore"],
+          "items": { "type": "string" },
+          "description": "List of filenames to treat as ignore files."
         },
         "repotxt.excludeBinaryFiles": {
           "type": "boolean",
@@ -203,47 +186,40 @@
         "repotxt.binaryFileExtensions": {
           "type": "array",
           "default": [
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".gif",
-            ".bmp",
-            ".tiff",
-            ".ico",
-            ".pdf",
-            ".zip",
-            ".gz",
-            ".rar",
-            ".7z",
-            ".mp3",
-            ".wav",
-            ".ogg",
-            ".mp4",
-            ".mov",
-            ".avi",
-            ".mkv",
-            ".exe",
-            ".dll",
-            ".so",
-            ".app",
-            ".dmg",
-            ".woff",
-            ".woff2",
-            ".eot",
-            ".ttf",
-            ".otf",
-            ".class",
-            ".jar",
-            ".pyc",
-            ".pyo",
-            ".db",
-            ".sqlite",
-            ".sqlite3"
+            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".ico", ".pdf", ".zip", ".gz", ".rar", ".7z", 
+            ".mp3", ".wav", ".ogg", ".mp4", ".mov", ".avi", ".mkv", 
+            ".exe", ".dll", ".so", ".app", ".dmg", ".vsix",
+            ".woff", ".woff2", ".eot", ".ttf", ".otf", 
+            ".class", ".jar", ".pyc", ".pyo", ".db", ".sqlite", ".sqlite3"
           ],
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "description": "List of file extensions to be considered binary and automatically excluded."
+        },
+        "repotxt.checkFileSize": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable file size limit checks. If disabled, potentially large files will be read into memory."
+        },
+        "repotxt.maxFileSize": {
+          "type": "number",
+          "default": 1048576,
+          "description": "Maximum file size in bytes (default 1MB) to read content from. Larger files will be estimated."
+        },
+        "repotxt.maxReportSize": {
+          "type": "number",
+          "default": 10485760,
+          "description": "Maximum size of the generated report in characters (default ~10MB). Prevents VS Code from crashing on massive reports."
+        },
+        "repotxt.useSmartWatcher": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ignore changes in specific folders (like node_modules) to improve performance."
+        },
+        "repotxt.watcherExcludes": {
+          "type": "array",
+          "default": ["node_modules", ".git", "dist", "out", "build", ".vsix", ".log"],
+          "items": { "type": "string" },
+          "description": "List of path segments. If a file path contains any of these, changes to it won't trigger an auto-refresh."
         },
         "repotxt.aiStyle": {
           "type": "boolean",
@@ -252,8 +228,8 @@
         },
         "repotxt.aiPrompt": {
           "type": "string",
-          "default": "Prompt: Analyze the ${workspaceName} folder to understand its structure, purpose, and functionality.\nFollow these steps to study the codebase:\n\n1. Read the README file to gain an overview of the project, its goals, and any setup instructions.\n\n2. Examine the folder structure to understand how the files and directories are organized.\n\n3. Identify the main entry point of the application and start analyzing the code flow from there.\n\n4. Study the dependencies and libraries used in the project.\n\n5. Analyze the core functionality of the project.\n\n6. Look for any configuration files to understand project settings.\n\n7. Investigate any tests or test directories.\n\n8. Review documentation and inline comments.\n\n9. Identify potential areas for improvement.\n\n10. Provide a summary of findings.",
-          "description": "Custom prompt for AI-style analysis. Use ${workspaceName} to insert the workspace folder name."
+          "default": "Prompt: Analyze the ${workspaceName} folder...",
+          "description": "Custom prompt for AI-style analysis."
         },
         "repotxt.selectionHighlightColor": {
           "type": "string",
@@ -263,17 +239,17 @@
         "repotxt.showStatusBarLineCount": {
           "type": "boolean",
           "default": true,
-          "description": "Show total line count of selected files in the status bar."
+          "description": "Show total line count in the status bar."
         },
         "repotxt.showStatusBarCharCount": {
           "type": "boolean",
           "default": true,
-          "description": "Show total character count of selected files in the status bar."
+          "description": "Show total character count in the status bar."
         },
         "repotxt.showStatusBarFileCount": {
           "type": "boolean",
           "default": true,
-          "description": "Show total file count of selected files in the status bar."
+          "description": "Show total file count in the status bar."
         },
         "repotxt.showTooltipLineCount": {
           "type": "boolean",

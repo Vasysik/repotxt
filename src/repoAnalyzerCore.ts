@@ -32,7 +32,10 @@ export class RepoAnalyzerCore {
 
     // Configuration Cache
     private binaryExtensions: Set<string> = new Set();
-    private maxFileSizeForStats: number = 1024 * 100; // 100KB limit for strict counting
+    
+    // Runtime counters
+    private currentReportSize: number = 0;
+    private reportLimitHit: boolean = false;
 
     private readonly sessionStateKey = 'repotxt.sessionState';
     private _onDidChange = new vscode.EventEmitter<void>();
@@ -51,7 +54,10 @@ export class RepoAnalyzerCore {
         vscode.workspace.onDidChangeWorkspaceFolders(() => this.initialize());
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('repotxt')) {
-                this.recalculateAutoExclusions().then(() => this.refresh());
+                this.recalculateAutoExclusions().then(() => {
+                    this.setupFileWatcher();
+                    this.refresh();
+                });
             }
         });
     }
@@ -113,8 +119,9 @@ export class RepoAnalyzerCore {
         this.autoExcludes.clear();
         const config = vscode.workspace.getConfiguration('repotxt');
         const patternsToProcess = new Set<string>();
-        
-        this.binaryExtensions = new Set(config.get<string[]>('binaryFileExtensions', []));
+
+        const exts = config.get<string[]>('binaryFileExtensions', []).map(e => e.toLowerCase());
+        this.binaryExtensions = new Set(exts);
 
         if (config.get('autoExcludeEnabled', true)) {
             config.get<string[]>('autoExcludePatterns', []).forEach(p => patternsToProcess.add(p));
@@ -142,7 +149,6 @@ export class RepoAnalyzerCore {
     private async processPatterns(patterns: string[]) {
         if (!this.workspaceRoot) return;
         
-        // Limit concurrent findFiles operations to prevent choking
         const promises = patterns.map(async (pattern) => {
             try {
                 let globPattern = pattern;
@@ -151,12 +157,10 @@ export class RepoAnalyzerCore {
                 } else if (!pattern.includes('/') && !pattern.startsWith('**/')) {
                     globPattern = `**/${pattern}`;
                 }
-                // Exclude node_modules/git from search to speed it up
                 const matches = await vscode.workspace.findFiles(globPattern, '**/{node_modules,.git}/**');
                 matches.forEach(uri => this.addPathToSet(uri.fsPath, this.autoExcludes));
             } catch (error) {/* Ignore */}
             
-            // Also check direct path existence synchronously (fast)
             try {
                 const directPath = path.join(this.workspaceRoot!, pattern.replace(/\/$/, ''));
                 if (fs.existsSync(directPath)) this.addPathToSet(directPath, this.autoExcludes);
@@ -169,21 +173,27 @@ export class RepoAnalyzerCore {
     private setupFileWatcher() {
         if (this.fileWatcher) this.fileWatcher.dispose();
         if (this.workspaceRoot) {
-            // Watch for changes, but process carefully
             this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
             
             const handleFileChange = (uri: vscode.Uri) => {
-                // FILTER: Don't react to changes in typically heavy folders unless explicitly needed
-                if (uri.fsPath.includes('node_modules') || uri.fsPath.includes('.git') || uri.fsPath.includes('dist') || uri.fsPath.includes('out')) {
-                    return;
+                const config = vscode.workspace.getConfiguration('repotxt');
+                
+                if (config.get('useSmartWatcher', true)) {
+                    const excludes = config.get<string[]>('watcherExcludes', []);
+                    const fsPath = uri.fsPath;
+                    if (excludes.some(ex => fsPath.includes(ex))) {
+                        return;
+                    }
                 }
                 
-                this.fileStatsCache.delete(uri.fsPath); // Invalidate cache for this file
+                this.fileStatsCache.delete(uri.fsPath);
                 this.validateRanges(uri.fsPath);
                 this.debouncedRefresh();
             };
 
-            this.fileWatcher.onDidCreate(() => this.debouncedRefresh());
+            this.fileWatcher.onDidCreate((uri) => {
+                handleFileChange(uri);
+            });
             this.fileWatcher.onDidDelete(() => this.debouncedRefresh());
             this.fileWatcher.onDidChange(handleFileChange);
         }
@@ -194,8 +204,11 @@ export class RepoAnalyzerCore {
         if (!ranges || ranges.length === 0) return;
         
         try {
-            // Only read if we actually have partial ranges to validate
-            if (fs.statSync(filePath).size > this.maxFileSizeForStats) return;
+            const config = vscode.workspace.getConfiguration('repotxt');
+            const maxFileSize = config.get<number>('maxFileSize', 1024 * 1024);
+            const checkSize = config.get<boolean>('checkFileSize', true);
+
+            if (checkSize && fs.statSync(filePath).size > maxFileSize) return;
 
             const content = fs.readFileSync(filePath, 'utf8');
             const lineCount = content.split('\n').length;
@@ -215,14 +228,12 @@ export class RepoAnalyzerCore {
             clearTimeout(this.refreshTimeout);
         }
         this.refreshTimeout = setTimeout(async () => {
-            // Don't recalculate auto exclusions on every file change, it's too heavy
-            // Only refresh the tree view and stats
+            // Auto-update logic
             this.refresh();
-        }, 1000); // Increased debounce time
+        }, 300); // 300ms is responsive enough
     }
 
     public isPathEffectivelyExcluded(fullPath: string): boolean {
-        // 1. Manual overrides (fastest)
         const check = (p: string): boolean | null => {
             const pWithSep = p + path.sep;
             if (this.manualIncludes.has(p) || this.manualIncludes.has(pWithSep)) return false;
@@ -233,13 +244,11 @@ export class RepoAnalyzerCore {
         const manualRule = check(fullPath);
         if (manualRule !== null) return manualRule;
 
-        // 2. Binary Extension Check (Dynamic)
         if (vscode.workspace.getConfiguration('repotxt').get('excludeBinaryFiles', true)) {
-            const ext = path.extname(fullPath);
+            const ext = path.extname(fullPath).toLowerCase();
             if (ext && this.binaryExtensions.has(ext)) return true;
         }
 
-        // 3. Auto Excludes (Glob results)
         const autoCheck = (p: string): boolean | null => {
              const pWithSep = p + path.sep;
              if(this.autoExcludes.has(p) || this.autoExcludes.has(pWithSep)) return true;
@@ -251,8 +260,6 @@ export class RepoAnalyzerCore {
 
     private addPathToSet(fullPath: string, set: Set<string>) {
         try {
-            // Optimization: don't stat every time if we can assume from context, 
-            // but for correctness we keep it or wrap in try/catch
             if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) set.add(fullPath + path.sep);
             else set.add(fullPath);
         } catch (e) {
@@ -326,7 +333,6 @@ export class RepoAnalyzerCore {
     }
 
     private updateParentStats(childPath: string): void {
-        // Debounce stats updates to prevent UI flooding
         setTimeout(() => {
             const payload: any[] = [];
             try {
@@ -432,12 +438,22 @@ export class RepoAnalyzerCore {
         }
     }
 
-    private async generateFileContentBlocks(dirPath: string): Promise<string[]> {
+    private async generateFileContentBlocks(dirPath: string, maxReportSize: number): Promise<string[]> {
+        if (this.reportLimitHit) return [];
+
         const results: string[] = [];
         const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
         const sorted = entries.sort((a, b) => a.name.localeCompare(b.name));
 
         for (const entry of sorted) {
+            if (this.currentReportSize >= maxReportSize) {
+                if (!this.reportLimitHit) {
+                    results.push(`\n\n--- REPORT LIMIT REACHED (${(maxReportSize / 1024 / 1024).toFixed(1)} MB) ---\nExecution stopped to prevent VS Code crash.\n`);
+                    this.reportLimitHit = true;
+                }
+                return results;
+            }
+
             const fullPath = path.join(dirPath, entry.name);
             
             if (entry.isDirectory()) {
@@ -446,7 +462,7 @@ export class RepoAnalyzerCore {
                 const hasPartials = this.folderContainsPartialIncludes(fullPath);
 
                 if (!dirExcluded || hasIncludes || hasPartials) {
-                    const sub = await this.generateFileContentBlocks(fullPath);
+                    const sub = await this.generateFileContentBlocks(fullPath, maxReportSize);
                     results.push(...sub);
                 }
             } else {
@@ -455,14 +471,18 @@ export class RepoAnalyzerCore {
                 const relativePath = path.relative(this.workspaceRoot!, fullPath).split(path.sep).join(path.posix.sep);
                 const ranges = this.partialIncludes.get(fullPath);
                 
+                let contentStr = '';
                 if (ranges && ranges.length > 0) {
                     const content = await this.readFileContentWithRanges(fullPath, ranges);
                     const rangeDescriptions = ranges.map(r => `${r.start}-${r.end}`).join(', ');
-                    results.push(`File: ${relativePath} (lines ${rangeDescriptions})\nContent: ${content}\n`);
+                    contentStr = `File: ${relativePath} (lines ${rangeDescriptions})\nContent: ${content}\n`;
                 } else {
                     const content = await this.readFileContent(fullPath);
-                    results.push(`File: ${relativePath}\nContent: ${content}\n`);
+                    contentStr = `File: ${relativePath}\nContent: ${content}\n`;
                 }
+                
+                this.currentReportSize += contentStr.length;
+                results.push(contentStr);
             }
         }
         return results;
@@ -524,7 +544,23 @@ export class RepoAnalyzerCore {
     private async readFileContent(filePath: string): Promise<string> {
         try {
             const config = vscode.workspace.getConfiguration('repotxt');
-            if (config.get<string[]>('binaryFileExtensions', []).includes(path.extname(filePath))) return '[Binary file, content not displayed]';
+            
+            // Binary check
+            if (config.get<string[]>('binaryFileExtensions', []).includes(path.extname(filePath))) {
+                return '[Binary file, content not displayed]';
+            }
+
+            // Size check
+            const maxFileSize = config.get<number>('maxFileSize', 1048576);
+            const checkSize = config.get<boolean>('checkFileSize', true);
+
+            if (checkSize) {
+                const stats = await fs.promises.stat(filePath);
+                if (stats.size > maxFileSize) {
+                    return `[File skipped: Size ${(stats.size / 1024).toFixed(1)}KB exceeds limit of ${(maxFileSize / 1024).toFixed(1)}KB]`;
+                }
+            }
+
             return await fs.promises.readFile(filePath, 'utf8');
         } catch {
             return '[Unable to read file content]';
@@ -533,8 +569,14 @@ export class RepoAnalyzerCore {
 
     async generateReport(): Promise<string> {
         if (!this.workspaceRoot) return 'No workspace folder opened';
-        let report = '';
+        
+        this.currentReportSize = 0;
+        this.reportLimitHit = false;
+        
         const config = vscode.workspace.getConfiguration('repotxt');
+        const maxReportSize = config.get<number>('maxReportSize', 10485760);
+
+        let report = '';
         const useAiStyle = config.get('aiStyle', false);
         const workspaceName = path.basename(this.workspaceRoot);
         if (useAiStyle) report += config.get('aiPrompt', '').replace('${workspaceName}', workspaceName) + '\n\n';
@@ -545,8 +587,10 @@ export class RepoAnalyzerCore {
         await this.getFlatStructure(this.workspaceRoot, structureList);
         const folderStructure = structureList.join('\n');
         report += `Folder Structure: ${workspaceName}\n${folderStructure}\n\n`;
+        
+        this.currentReportSize = report.length;
 
-        const fileContents = await this.generateFileContentBlocks(this.workspaceRoot);
+        const fileContents = await this.generateFileContentBlocks(this.workspaceRoot, maxReportSize);
         report += fileContents.join('\n');
 
         return report;
@@ -637,9 +681,13 @@ export class RepoAnalyzerCore {
         if (this.fileStatsCache.has(fullPath)) return this.fileStatsCache.get(fullPath)!;
         
         try {
+            const config = vscode.workspace.getConfiguration('repotxt');
+            const maxFileSize = config.get<number>('maxFileSize', 1048576);
+            const checkSize = config.get<boolean>('checkFileSize', true);
+
             const stats = fs.statSync(fullPath);
-            if (stats.size > this.maxFileSizeForStats) {
-                const estimatedLines = Math.ceil(stats.size / 40); // Approx 40 chars per line
+            if (checkSize && stats.size > maxFileSize) {
+                const estimatedLines = Math.ceil(stats.size / 40);
                 const res = { lines: estimatedLines, chars: stats.size };
                 this.fileStatsCache.set(fullPath, res);
                 return res;
@@ -654,34 +702,11 @@ export class RepoAnalyzerCore {
         }
     }
 
-    private countVisiblePaths(): number {
-        let cnt = 0;
-        const walk = (dir: string) => {
-            try {
-                fs.readdirSync(dir,{withFileTypes:true}).forEach(e=>{
-                    const p = path.join(dir,e.name);
-                    if(this.isPathVisuallyExcluded(p)) return;
-                    cnt++;
-                    if(e.isDirectory()) walk(p);
-                });
-            } catch {}
-        };
-        if (this.workspaceRoot) walk(this.workspaceRoot);
-        return cnt;
-    }
-
-    private structureCharTotal(lines: number): number {
-        return lines ? lines * 2 + lines : 0;
-    }
-
     public getSelectionStats(): { lines: number; chars: number; files: number } {
         let totalLines = 0;
         let totalChars = 0;
         let filesCount = 0;
         
-        const processedFiles = new Set<string>();
-        
-        // Safeguard: recursion depth or item limit could be added here
         const processPath = (dirPath: string) => {
             try {
                 const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -689,45 +714,18 @@ export class RepoAnalyzerCore {
                     const fullPath = path.join(dirPath, entry.name);
                     
                     if (entry.isDirectory()) {
-                        // IMPORTANT: Don't enter excluded directories to save IO
                         if (!this.isPathVisuallyExcluded(fullPath)) {
                             processPath(fullPath);
                         }
                     } else {
-                        if (!this.isPathEffectivelyExcluded(fullPath) && !processedFiles.has(fullPath)) {
-                            processedFiles.add(fullPath);
+                        if (!this.isPathEffectivelyExcluded(fullPath)) {
                             const stats = this.getFileStats(fullPath);
                             
                             if (this.partialIncludes.has(fullPath)) {
                                 const ranges = this.partialIncludes.get(fullPath)!;
-                                let partialLines = 0;
-                                let partialChars = 0;
-                                
-                                try {
-                                    // Only read for partial stats if file isn't gigantic
-                                    if (stats.chars < this.maxFileSizeForStats) {
-                                        const content = fs.readFileSync(fullPath, 'utf8');
-                                        const lines = content.split('\n');
-                                        const mergedRanges = this.mergeRanges(ranges);
-                                        for (const range of mergedRanges) {
-                                            const validStart = Math.max(0, range.start - 1);
-                                            const validEnd = Math.min(range.end, lines.length);
-                                            for (let i = validStart; i < validEnd; i++) {
-                                                if (i >= 0 && i < lines.length) {
-                                                    partialLines++;
-                                                    partialChars += lines[i].length + 1;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // Estimate for large files
-                                        partialLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
-                                        partialChars = partialLines * 40;
-                                    }
-                                } catch {}
-                                
-                                totalLines += partialLines;
-                                totalChars += partialChars;
+                                const pLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
+                                totalLines += pLines;
+                                totalChars += pLines * 40; 
                             } else {
                                 totalLines += stats.lines;
                                 totalChars += stats.chars;
@@ -772,7 +770,7 @@ export class RepoAnalyzerCore {
                                 const ranges = this.partialIncludes.get(fullPath)!;
                                 const pLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
                                 totalLines += pLines;
-                                totalChars += pLines * 40; // Estimate
+                                totalChars += pLines * 40; 
                             } else {
                                 totalLines += stats.lines;
                                 totalChars += stats.chars;
@@ -804,7 +802,11 @@ export class RepoAnalyzerCore {
         }
         
         try {
-            if (fs.statSync(fullPath).size > this.maxFileSizeForStats) {
+            const config = vscode.workspace.getConfiguration('repotxt');
+            const maxFileSize = config.get<number>('maxFileSize', 1048576);
+            const checkSize = config.get<boolean>('checkFileSize', true);
+
+            if (checkSize && fs.statSync(fullPath).size > maxFileSize) {
                  const pLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
                  return { lines: pLines, chars: pLines * 40 };
             }
