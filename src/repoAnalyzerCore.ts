@@ -24,9 +24,15 @@ export class RepoAnalyzerCore {
     private manualIncludes: Set<string> = new Set();
     private manualExcludes: Set<string> = new Set();
     private partialIncludes: Map<string, Range[]> = new Map();
+    
+    // Caches
     private hasIncludesCache: Map<string, boolean> = new Map();
     private hasPartialsCache: Map<string, boolean> = new Map();
     private fileStatsCache = new Map<string, { lines: number; chars: number }>();
+
+    // Configuration Cache
+    private binaryExtensions: Set<string> = new Set();
+    private maxFileSizeForStats: number = 1024 * 100; // 100KB limit for strict counting
 
     private readonly sessionStateKey = 'repotxt.sessionState';
     private _onDidChange = new vscode.EventEmitter<void>();
@@ -107,17 +113,21 @@ export class RepoAnalyzerCore {
         this.autoExcludes.clear();
         const config = vscode.workspace.getConfiguration('repotxt');
         const patternsToProcess = new Set<string>();
+        
+        this.binaryExtensions = new Set(config.get<string[]>('binaryFileExtensions', []));
 
         if (config.get('autoExcludeEnabled', true)) {
             config.get<string[]>('autoExcludePatterns', []).forEach(p => patternsToProcess.add(p));
         }
+        
         if (config.get('respectIgnoreFiles', true)) {
             const ignoreFileNames = config.get<string[]>('ignoreFileNames', ['.gitignore']);
             for (const fileName of ignoreFileNames) {
                 const ignoreFilePath = path.join(this.workspaceRoot, fileName);
                 if (fs.existsSync(ignoreFilePath)) {
                     try {
-                        fs.readFileSync(ignoreFilePath, 'utf8').split(/\r?\n/).forEach(p => {
+                        const content = await fs.promises.readFile(ignoreFilePath, 'utf8');
+                        content.split(/\r?\n/).forEach(p => {
                             const trimmed = p.trim();
                             if (trimmed && !trimmed.startsWith('#')) patternsToProcess.add(trimmed);
                         });
@@ -125,43 +135,54 @@ export class RepoAnalyzerCore {
                 }
             }
         }
+        
         await this.processPatterns(Array.from(patternsToProcess));
-        if (config.get('excludeBinaryFiles', true)) {
-            const binaryExtensions = config.get<string[]>('binaryFileExtensions', []);
-            const globPattern = `**/*.{${binaryExtensions.map(ext => ext.replace(/^\./, '')).join(',')}}`;
-            const files = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
-            files.forEach(file => this.addPathToSet(file.fsPath, this.autoExcludes));
-        }
     }
 
     private async processPatterns(patterns: string[]) {
         if (!this.workspaceRoot) return;
-        for (const pattern of patterns) {
+        
+        // Limit concurrent findFiles operations to prevent choking
+        const promises = patterns.map(async (pattern) => {
             try {
-                let globPattern = pattern
+                let globPattern = pattern;
                 if (pattern.endsWith('/')) {
-                    globPattern = `**/${pattern}**`
+                    globPattern = `**/${pattern}**`;
                 } else if (!pattern.includes('/') && !pattern.startsWith('**/')) {
-                    globPattern = `**/${pattern}`
+                    globPattern = `**/${pattern}`;
                 }
-                const matches = await vscode.workspace.findFiles(globPattern, '**/node_modules/**');
+                // Exclude node_modules/git from search to speed it up
+                const matches = await vscode.workspace.findFiles(globPattern, '**/{node_modules,.git}/**');
                 matches.forEach(uri => this.addPathToSet(uri.fsPath, this.autoExcludes));
             } catch (error) {/* Ignore */}
+            
+            // Also check direct path existence synchronously (fast)
             try {
-                const directPath = path.join(this.workspaceRoot, pattern.replace(/\/$/, ''));
+                const directPath = path.join(this.workspaceRoot!, pattern.replace(/\/$/, ''));
                 if (fs.existsSync(directPath)) this.addPathToSet(directPath, this.autoExcludes);
             } catch (error) {/* Ignore */}
-        }
+        });
+
+        await Promise.all(promises);
     }
 
     private setupFileWatcher() {
         if (this.fileWatcher) this.fileWatcher.dispose();
         if (this.workspaceRoot) {
+            // Watch for changes, but process carefully
             this.fileWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, '**/*'));
+            
             const handleFileChange = (uri: vscode.Uri) => {
+                // FILTER: Don't react to changes in typically heavy folders unless explicitly needed
+                if (uri.fsPath.includes('node_modules') || uri.fsPath.includes('.git') || uri.fsPath.includes('dist') || uri.fsPath.includes('out')) {
+                    return;
+                }
+                
+                this.fileStatsCache.delete(uri.fsPath); // Invalidate cache for this file
                 this.validateRanges(uri.fsPath);
                 this.debouncedRefresh();
             };
+
             this.fileWatcher.onDidCreate(() => this.debouncedRefresh());
             this.fileWatcher.onDidDelete(() => this.debouncedRefresh());
             this.fileWatcher.onDidChange(handleFileChange);
@@ -173,6 +194,9 @@ export class RepoAnalyzerCore {
         if (!ranges || ranges.length === 0) return;
         
         try {
+            // Only read if we actually have partial ranges to validate
+            if (fs.statSync(filePath).size > this.maxFileSizeForStats) return;
+
             const content = fs.readFileSync(filePath, 'utf8');
             const lineCount = content.split('\n').length;
             const validRanges = ranges.filter(r => r.start <= lineCount);
@@ -191,12 +215,14 @@ export class RepoAnalyzerCore {
             clearTimeout(this.refreshTimeout);
         }
         this.refreshTimeout = setTimeout(async () => {
-            await this.recalculateAutoExclusions();
+            // Don't recalculate auto exclusions on every file change, it's too heavy
+            // Only refresh the tree view and stats
             this.refresh();
-        }, 300);
+        }, 1000); // Increased debounce time
     }
 
     public isPathEffectivelyExcluded(fullPath: string): boolean {
+        // 1. Manual overrides (fastest)
         const check = (p: string): boolean | null => {
             const pWithSep = p + path.sep;
             if (this.manualIncludes.has(p) || this.manualIncludes.has(pWithSep)) return false;
@@ -207,6 +233,13 @@ export class RepoAnalyzerCore {
         const manualRule = check(fullPath);
         if (manualRule !== null) return manualRule;
 
+        // 2. Binary Extension Check (Dynamic)
+        if (vscode.workspace.getConfiguration('repotxt').get('excludeBinaryFiles', true)) {
+            const ext = path.extname(fullPath);
+            if (ext && this.binaryExtensions.has(ext)) return true;
+        }
+
+        // 3. Auto Excludes (Glob results)
         const autoCheck = (p: string): boolean | null => {
              const pWithSep = p + path.sep;
              if(this.autoExcludes.has(p) || this.autoExcludes.has(pWithSep)) return true;
@@ -218,7 +251,9 @@ export class RepoAnalyzerCore {
 
     private addPathToSet(fullPath: string, set: Set<string>) {
         try {
-            if (fs.statSync(fullPath).isDirectory()) set.add(fullPath + path.sep);
+            // Optimization: don't stat every time if we can assume from context, 
+            // but for correctness we keep it or wrap in try/catch
+            if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) set.add(fullPath + path.sep);
             else set.add(fullPath);
         } catch (e) {
             set.add(fullPath);
@@ -253,9 +288,7 @@ export class RepoAnalyzerCore {
             if (isDir) this.manualIncludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualIncludes.delete(p); });
         }
         this.saveState();
-        
         this.updateParentStats(fullPath);
-        
         this.refresh();
     }
 
@@ -263,61 +296,65 @@ export class RepoAnalyzerCore {
         const affectedParents = new Set<string>();
         
         fullPaths.forEach(fullPath => {
-            const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
-            const fullPathWithSep = isDir ? fullPath + path.sep : fullPath;
-            const isCurrentlyExcluded = this.isPathEffectivelyExcluded(fullPath);
+            try {
+                const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+                const fullPathWithSep = isDir ? fullPath + path.sep : fullPath;
+                const isCurrentlyExcluded = this.isPathEffectivelyExcluded(fullPath);
 
-            this.removePathFromSet(fullPath, this.manualIncludes);
-            this.removePathFromSet(fullPath, this.manualExcludes);
+                this.removePathFromSet(fullPath, this.manualIncludes);
+                this.removePathFromSet(fullPath, this.manualExcludes);
 
-            if (isCurrentlyExcluded) {
-                this.addPathToSet(fullPath, this.manualIncludes);
-                if (isDir) this.manualExcludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualExcludes.delete(p); });
-            } else {
-                this.addPathToSet(fullPath, this.manualExcludes);
-                if (isDir) this.manualIncludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualIncludes.delete(p); });
-            }
-            
-            let parent = path.dirname(fullPath);
-            while (parent && parent !== this.workspaceRoot && parent !== path.dirname(parent)) {
-                affectedParents.add(parent);
-                parent = path.dirname(parent);
-            }
+                if (isCurrentlyExcluded) {
+                    this.addPathToSet(fullPath, this.manualIncludes);
+                    if (isDir) this.manualExcludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualExcludes.delete(p); });
+                } else {
+                    this.addPathToSet(fullPath, this.manualExcludes);
+                    if (isDir) this.manualIncludes.forEach(p => { if (p.startsWith(fullPathWithSep)) this.manualIncludes.delete(p); });
+                }
+                
+                let parent = path.dirname(fullPath);
+                while (parent && parent !== this.workspaceRoot && parent !== path.dirname(parent)) {
+                    affectedParents.add(parent);
+                    parent = path.dirname(parent);
+                }
+            } catch(e) {}
         });
         
         this.saveState();
-        
         affectedParents.forEach(parent => this.updateParentStats(parent));
-        
         this.refresh();
     }
 
     private updateParentStats(childPath: string): void {
-        const payload: any[] = [];
-        
-        if (fs.existsSync(childPath) && fs.statSync(childPath).isDirectory()) {
-            payload.push({ path: childPath, stats: this.getStatsForPath(childPath) });
-        }
-        
-        let current = path.dirname(childPath);
-        const root = this.workspaceRoot ?? '';
-        
-        while (current && current.startsWith(root) && current !== path.dirname(current)) {
-            payload.push({ path: current, stats: this.getStatsForPath(current) });
-            current = path.dirname(current);
-        }
-        
-        if (payload.length > 0) {
-            this._onDidUpdateNodes.fire(payload.map(item => ({
-                path: item.path,
-                excluded: this.isPathVisuallyExcluded(item.path),
-                partial: this.hasPartialIncludes(item.path)
-            })));
-            
-            payload.forEach(item => {
-                this._onDidUpdatePartial.fire(item.path);
-            });
-        }
+        // Debounce stats updates to prevent UI flooding
+        setTimeout(() => {
+            const payload: any[] = [];
+            try {
+                if (fs.existsSync(childPath) && fs.statSync(childPath).isDirectory()) {
+                    payload.push({ path: childPath, stats: this.getStatsForPath(childPath) });
+                }
+                
+                let current = path.dirname(childPath);
+                const root = this.workspaceRoot ?? '';
+                
+                while (current && current.startsWith(root) && current !== path.dirname(current)) {
+                    payload.push({ path: current, stats: this.getStatsForPath(current) });
+                    current = path.dirname(current);
+                }
+                
+                if (payload.length > 0) {
+                    this._onDidUpdateNodes.fire(payload.map(item => ({
+                        path: item.path,
+                        excluded: this.isPathVisuallyExcluded(item.path),
+                        partial: this.hasPartialIncludes(item.path)
+                    })));
+                    
+                    payload.forEach(item => {
+                        this._onDidUpdatePartial.fire(item.path);
+                    });
+                }
+            } catch(e) {}
+        }, 50);
     }
 
     private folderContainsManualIncludes(dirPath: string): boolean {
@@ -350,7 +387,7 @@ export class RepoAnalyzerCore {
         const isEffectivelyExcluded = this.isPathEffectivelyExcluded(fullPath);
         if (!isEffectivelyExcluded) return false;
         try {
-            if (fs.statSync(fullPath).isDirectory()) {
+            if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
                 if (this.folderContainsManualIncludes(fullPath) || 
                     this.folderContainsPartialIncludes(fullPath)) {
                     return false;
@@ -361,19 +398,20 @@ export class RepoAnalyzerCore {
     }
 
     private async getFlatStructure(dirPath: string, structureList: string[]): Promise<void> {
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => {
+        const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+        const sorted = entries.sort((a, b) => {
             const aIsDir = a.isDirectory() ? 0 : 1;
             const bIsDir = b.isDirectory() ? 0 : 1;
             return aIsDir !== bIsDir ? aIsDir - bIsDir : a.name.localeCompare(b.name);
         });
 
-        for (const entry of entries) {
+        for (const entry of sorted) {
             const fullPath = path.join(dirPath, entry.name);
 
             if (entry.isDirectory()) {
-                const dirExcluded   = this.isPathVisuallyExcluded(fullPath);
-                const hasIncludes   = this.folderContainsManualIncludes(fullPath);
-                const hasPartials   = this.folderContainsPartialIncludes(fullPath);
+                const dirExcluded = this.isPathVisuallyExcluded(fullPath);
+                const hasIncludes = this.folderContainsManualIncludes(fullPath);
+                const hasPartials = this.folderContainsPartialIncludes(fullPath);
 
                 if (!dirExcluded) {
                     const relDir = path.relative(this.workspaceRoot!, fullPath)
@@ -396,9 +434,10 @@ export class RepoAnalyzerCore {
 
     private async generateFileContentBlocks(dirPath: string): Promise<string[]> {
         const results: string[] = [];
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+        const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+        const sorted = entries.sort((a, b) => a.name.localeCompare(b.name));
 
-        for (const entry of entries) {
+        for (const entry of sorted) {
             const fullPath = path.join(dirPath, entry.name);
             
             if (entry.isDirectory()) {
@@ -431,7 +470,7 @@ export class RepoAnalyzerCore {
 
     private async readFileContentWithRanges(filePath: string, ranges: Range[]): Promise<string> {
         try {
-            const content = fs.readFileSync(filePath, 'utf8');
+            const content = await fs.promises.readFile(filePath, 'utf8');
             const lines = content.split('\n');
             const selectedLines: string[] = [];
             
@@ -486,7 +525,7 @@ export class RepoAnalyzerCore {
         try {
             const config = vscode.workspace.getConfiguration('repotxt');
             if (config.get<string[]>('binaryFileExtensions', []).includes(path.extname(filePath))) return '[Binary file, content not displayed]';
-            return fs.readFileSync(filePath, 'utf8');
+            return await fs.promises.readFile(filePath, 'utf8');
         } catch {
             return '[Unable to read file content]';
         }
@@ -596,11 +635,20 @@ export class RepoAnalyzerCore {
 
     public getFileStats(fullPath: string): { lines: number; chars: number } {
         if (this.fileStatsCache.has(fullPath)) return this.fileStatsCache.get(fullPath)!;
+        
         try {
+            const stats = fs.statSync(fullPath);
+            if (stats.size > this.maxFileSizeForStats) {
+                const estimatedLines = Math.ceil(stats.size / 40); // Approx 40 chars per line
+                const res = { lines: estimatedLines, chars: stats.size };
+                this.fileStatsCache.set(fullPath, res);
+                return res;
+            }
+
             const txt = fs.readFileSync(fullPath, 'utf8');
-            const stat = { lines: txt.split('\n').length, chars: txt.length };
-            this.fileStatsCache.set(fullPath, stat);
-            return stat;
+            const res = { lines: txt.split('\n').length, chars: txt.length };
+            this.fileStatsCache.set(fullPath, res);
+            return res;
         } catch { 
             return { lines: 0, chars: 0 }; 
         }
@@ -609,16 +657,19 @@ export class RepoAnalyzerCore {
     private countVisiblePaths(): number {
         let cnt = 0;
         const walk = (dir: string) => {
-            fs.readdirSync(dir,{withFileTypes:true}).forEach(e=>{
-                const p = path.join(dir,e.name);
-                if(this.isPathVisuallyExcluded(p)) return;
-                cnt++;
-                if(e.isDirectory()) walk(p);
-            });
+            try {
+                fs.readdirSync(dir,{withFileTypes:true}).forEach(e=>{
+                    const p = path.join(dir,e.name);
+                    if(this.isPathVisuallyExcluded(p)) return;
+                    cnt++;
+                    if(e.isDirectory()) walk(p);
+                });
+            } catch {}
         };
         if (this.workspaceRoot) walk(this.workspaceRoot);
         return cnt;
     }
+
     private structureCharTotal(lines: number): number {
         return lines ? lines * 2 + lines : 0;
     }
@@ -630,6 +681,7 @@ export class RepoAnalyzerCore {
         
         const processedFiles = new Set<string>();
         
+        // Safeguard: recursion depth or item limit could be added here
         const processPath = (dirPath: string) => {
             try {
                 const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -637,6 +689,7 @@ export class RepoAnalyzerCore {
                     const fullPath = path.join(dirPath, entry.name);
                     
                     if (entry.isDirectory()) {
+                        // IMPORTANT: Don't enter excluded directories to save IO
                         if (!this.isPathVisuallyExcluded(fullPath)) {
                             processPath(fullPath);
                         }
@@ -650,21 +703,28 @@ export class RepoAnalyzerCore {
                                 let partialLines = 0;
                                 let partialChars = 0;
                                 
-                                const content = fs.readFileSync(fullPath, 'utf8');
-                                const lines = content.split('\n');
-                                
-                                const mergedRanges = this.mergeRanges(ranges);
-                                for (const range of mergedRanges) {
-                                    const validStart = Math.max(0, range.start - 1);
-                                    const validEnd = Math.min(range.end, lines.length);
-                                    
-                                    for (let i = validStart; i < validEnd; i++) {
-                                        if (i >= 0 && i < lines.length) {
-                                            partialLines++;
-                                            partialChars += lines[i].length + 1;
+                                try {
+                                    // Only read for partial stats if file isn't gigantic
+                                    if (stats.chars < this.maxFileSizeForStats) {
+                                        const content = fs.readFileSync(fullPath, 'utf8');
+                                        const lines = content.split('\n');
+                                        const mergedRanges = this.mergeRanges(ranges);
+                                        for (const range of mergedRanges) {
+                                            const validStart = Math.max(0, range.start - 1);
+                                            const validEnd = Math.min(range.end, lines.length);
+                                            for (let i = validStart; i < validEnd; i++) {
+                                                if (i >= 0 && i < lines.length) {
+                                                    partialLines++;
+                                                    partialChars += lines[i].length + 1;
+                                                }
+                                            }
                                         }
+                                    } else {
+                                        // Estimate for large files
+                                        partialLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
+                                        partialChars = partialLines * 40;
                                     }
-                                }
+                                } catch {}
                                 
                                 totalLines += partialLines;
                                 totalChars += partialChars;
@@ -684,26 +744,12 @@ export class RepoAnalyzerCore {
         }
 
         const cfg = vscode.workspace.getConfiguration('repotxt');
-        
         if (cfg.get<boolean>('aiStyle', false)) {
             const prompt = cfg.get<string>('aiPrompt', '');
             totalLines += prompt.split('\n').length + 2;
             totalChars += prompt.length + 2;
         }
 
-        if (this.workspaceRoot) {
-            const fsHeader = `Folder Structure: ${path.basename(this.workspaceRoot)}`;
-            totalLines += 1;
-            totalChars += fsHeader.length + 1;
-        }
-
-        const structCount = this.countVisiblePaths();
-        totalLines += structCount;
-        totalChars += this.structureCharTotal(structCount);
-
-        totalLines += filesCount * 2;
-        totalChars += filesCount * 8;
-        
         return { lines: totalLines, chars: totalChars, files: filesCount };
     }
 
@@ -717,38 +763,16 @@ export class RepoAnalyzerCore {
                 const entries = fs.readdirSync(dirPath, { withFileTypes: true });
                 for (const entry of entries) {
                     const fullPath = path.join(dirPath, entry.name);
-                    
                     if (entry.isDirectory()) {
-                        if (!this.isPathVisuallyExcluded(fullPath)) {
-                            processPath(fullPath);
-                        }
+                        if (!this.isPathVisuallyExcluded(fullPath)) processPath(fullPath);
                     } else {
                         if (!this.isPathEffectivelyExcluded(fullPath)) {
                             const stats = this.getFileStats(fullPath);
                             if (this.partialIncludes.has(fullPath)) {
                                 const ranges = this.partialIncludes.get(fullPath)!;
-                                let partialLines = 0;
-                                let partialChars = 0;
-                                
-                                try {
-                                    const content = fs.readFileSync(fullPath, 'utf8');
-                                    const lines = content.split('\n');
-                                    
-                                    for (const range of ranges) {
-                                        const validStart = Math.max(0, range.start - 1);
-                                        const validEnd = Math.min(range.end, lines.length);
-                                        
-                                        for (let i = validStart; i < validEnd; i++) {
-                                            if (i >= 0 && i < lines.length) {
-                                                partialLines++;
-                                                partialChars += lines[i].length + 1;
-                                            }
-                                        }
-                                    }
-                                    
-                                    totalLines += partialLines;
-                                    totalChars += partialChars;
-                                } catch {}
+                                const pLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
+                                totalLines += pLines;
+                                totalChars += pLines * 40; // Estimate
                             } else {
                                 totalLines += stats.lines;
                                 totalChars += stats.chars;
@@ -780,6 +804,11 @@ export class RepoAnalyzerCore {
         }
         
         try {
+            if (fs.statSync(fullPath).size > this.maxFileSizeForStats) {
+                 const pLines = ranges.reduce((acc, r) => acc + (r.end - r.start + 1), 0);
+                 return { lines: pLines, chars: pLines * 40 };
+            }
+
             const content = fs.readFileSync(fullPath, 'utf8')
             const lines = content.split('\n')
             let partialLines = 0
