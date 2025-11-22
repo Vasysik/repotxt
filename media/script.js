@@ -42,6 +42,11 @@ function initializeEventListeners() {
         vscode.postMessage({ type: 'resetExclusions' });
     });
 
+    $('toggleAllBtn').addEventListener('click', () => {
+        showTooltip('toggleAllBtn', 'Toggling all...');
+        vscode.postMessage({ type: 'toggleAll' });
+    });
+
     $('collapseBtn').addEventListener('click', () => {
         expandedNodes.clear();
         updateExpandedStates();

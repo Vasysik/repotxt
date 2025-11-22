@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -53,6 +53,11 @@
       {
         "command": "repotxt.toggleExcludeMultiple",
         "title": "Toggle Exclude Multiple"
+      },
+      {
+        "command": "repotxt.toggleAll",
+        "title": "Toggle All (Include/Exclude)",
+        "icon": "$(eye)"
       },
       {
         "command": "repotxt.generateReport",
@@ -126,11 +131,17 @@
           "group": "navigation@3"
         },
         {
+          "command": "repotxt.toggleAll",
+          "when": "view == repotxt",
+          "group": "navigation@0"
+        },
+        {
           "command": "repotxt.openSettings",
           "when": "view == repotxt",
           "group": "navigation@4"
         }
       ],
+      
       "editor/context": [
         {
           "command": "repotxt.addSelection",

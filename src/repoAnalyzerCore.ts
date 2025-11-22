@@ -320,6 +320,26 @@ export class RepoAnalyzerCore {
         this.refresh();
     }
 
+    toggleAll(): void {
+        if (!this.workspaceRoot) return;
+        
+        const isCurrentlyExcluded = this.isPathEffectivelyExcluded(this.workspaceRoot);
+
+        this.manualIncludes.clear();
+        this.manualExcludes.clear();
+
+        if (isCurrentlyExcluded) {
+            this.addPathToSet(this.workspaceRoot, this.manualIncludes);
+            vscode.window.showInformationMessage('Included all files');
+        } else {
+            this.addPathToSet(this.workspaceRoot, this.manualExcludes);
+            vscode.window.showInformationMessage('Excluded all files');
+        }
+
+        this.saveState();
+        this.refresh();
+    }
+    
     private updateParentStats(childPath: string): void {
         setTimeout(() => {
             const payload: any[] = [];

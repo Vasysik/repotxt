@@ -156,6 +156,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('repotxt.resetExclusions', () => {
             core.resetExclusions();
         }),
+        vscode.commands.registerCommand('repotxt.toggleAll', () => {
+            core.toggleAll();
+        }),
         vscode.commands.registerCommand('repotxt.openSettings', () => {
             vscode.commands.executeCommand('workbench.action.openSettings', '@ext:TUBIK-corp.repotxt');
         }),

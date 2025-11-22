@@ -125,6 +125,9 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                 case 'resetExclusions':
                     vscode.commands.executeCommand('repotxt.resetExclusions');
                     break;
+                case 'toggleAll':
+                    this._core.toggleAll();
+                    break;
                 case 'openFile':
                     vscode.commands.executeCommand('vscode.open', vscode.Uri.file(data.path));
                     break;
@@ -280,6 +283,13 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                         <path d="M9.00006 13L9.00006 12.5L9.00006 12L1.00006 12L1.00006 13L9.00006 13Z" fill="currentColor"/>
                     </svg>
                     <span class="tooltip">Reset Exclusions</span>
+                </button>
+                <button class="btn-icon" id="toggleAllBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2C4.5 2 1.5 5 0 8c1.5 3 4.5 6 8 6s6.5-3 8-6c-1.5-3-4.5-6-8-6z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    <span class="tooltip">Include/Exclude All</span>
                 </button>
                 <button class="btn-icon" id="settingsBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
