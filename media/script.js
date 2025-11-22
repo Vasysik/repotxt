@@ -44,6 +44,7 @@ function initializeEventListeners() {
 
     $('toggleAllBtn').addEventListener('click', () => {
         showTooltip('toggleAllBtn', 'Toggling all...');
+        clearAllCaches();
         vscode.postMessage({ type: 'toggleAll' });
     });
 
