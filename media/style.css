@@ -140,11 +140,11 @@ body {
 }
 
 .file-tree {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0;
-    height: calc(100% - 35px);
+    min-height: 0;
 }
 
 .tree-node {
@@ -158,6 +158,7 @@ body {
     padding: 0 8px;
     cursor: pointer;
     position: relative;
+    min-width: 0;
 }
 
 .node-content:hover {
@@ -212,7 +213,8 @@ body {
 }
 
 .node-name {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -287,16 +289,16 @@ body {
 }
 
 .partial-badge {
-    position: absolute;
-    right: 8px;
-    top: 0;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    margin-right: 8px;
     color: var(--vscode-editorInfo-foreground, #00AFFF);
     pointer-events: none;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .node-content:hover .partial-badge,
@@ -306,8 +308,8 @@ body {
 }
 
 .partial-badge svg {
-    width: 16px;
-    height: 16px;
+    width: 10px;
+    height: 10px;
 }
 
 .node-children {
@@ -360,3 +362,136 @@ body {
     height: 48px;
     opacity: 0.3;
 }
+
+/* ---------------------------------------------------------------- search */
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.search-icon {
+    color: var(--text-secondary);
+    opacity: 0.7;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 22px;
+    padding: 0 6px;
+    background: var(--vscode-input-background, var(--bg-secondary));
+    color: var(--vscode-input-foreground, var(--text-primary));
+    border: 1px solid var(--vscode-input-border, var(--border));
+    border-radius: 3px;
+    font-family: var(--vscode-font-family);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.search-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.search-input:focus {
+    border-color: var(--vscode-focusBorder, var(--accent));
+}
+
+.search-clear {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 2px;
+}
+
+.search-clear:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.search-bar.has-query .search-clear {
+    display: flex;
+}
+
+/* ----------------------------------------------------- search results --- */
+.search-results {
+    padding: 4px 0;
+}
+
+.search-result .node-content {
+    height: auto;
+    min-height: 34px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+.search-name-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+    line-height: 1.25;
+    overflow: hidden;
+}
+
+.search-name-wrap .node-name {
+    font-size: var(--vscode-font-size);
+}
+
+.search-relpath {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result mark,
+.node-name mark {
+    background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* ----------------------------------------------------- lazy load state - */
+.node-loading {
+    padding: 2px 8px 2px 32px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* ------------------------------------------- icon container override --- */
+.node-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.node-icon svg {
+    display: block;
+}
+
+/* The rich SVGs produced by icons.js bring their own fills; the legacy
+   `.file-icon` / `.folder-icon` color rules above only take effect when
+   a glyph chooses to use `currentColor`. */

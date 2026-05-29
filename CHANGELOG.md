@@ -4,6 +4,46 @@ All notable changes to the "repotxt" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.5.0] - 2026-05-27
+
+### Added
+- **File search bar**
+  - New search input above the tree finds files by name fragment across the entire workspace.
+  - Excluded files are still shown in results (greyed out) so they can be re-included without scrolling.
+  - Matching part of each name is highlighted; the parent directory is shown as a subtitle.
+  - `Ctrl/Cmd+F` focuses search, `Esc` clears it.
+- **Rich file-type icons**
+  - File icons now reflect file type (JS/TS, Python, Rust, Go, HTML, CSS, JSON, Markdown, images, audio/video, archives, fonts, etc. — 150+ extensions).
+  - Special names (`package.json`, `Dockerfile`, `.gitignore`, `README`, `LICENSE`, `.env`, …) get distinct glyphs.
+  - Folders are tinted by purpose (`.git`, `node_modules`, `src`, `test`, `docs`, `dist`/`build`, `.vscode`, …) and switch between open/closed variants on expand.
+
+### Fixed
+- **Report line endings are normalized to LF, fixing inflated counts on Windows.** Source files checked out on Windows usually have CRLF endings. The report counted those `\r` characters, but the report document is saved with LF — so the status-bar total came out a few hundred characters larger than the saved file. The report now converts CRLF (and lone CR) to LF, so the generated text, the saved file, and the status-bar count all agree regardless of platform. This also fixes trailing-whitespace trimming, which previously did almost nothing on CRLF files (the `\r` sat between the trailing spaces and the newline, so the trim never matched). Per-file tooltips no longer count CR either.
+- **Status-bar line/char totals now match the generated report exactly.** The prediction used to sum the raw line/char counts of each file and ignored everything the report actually wraps around them — the `Folder Structure:` header and its file list, the per-file `File: …` / `Content: …` prefixes, the trailing newlines, the `\n` inserted between file blocks, and the AI prompt (with `${workspaceName}` substituted). The total is now computed by mirroring the report assembly byte-for-byte, so the number shown equals the report's real length and line count. Per-file hover tooltips still show each file's own natural size.
+  - If your editor trims trailing whitespace on save, the report you measure after saving could still be a few characters shorter than generated. The new `repotxt.trimTrailingWhitespace` setting (default off) makes the report itself drop trailing whitespace, so the generated output, the saved file, and the status-bar count all agree.
+- **No more flicker / jumping when toggling the eye (exclude) on a file.** A state change used to trigger a full DOM teardown-and-rebuild of the tree. The webview now reconciles a refreshed tree in place: if the set of visible nodes is unchanged (the usual case for exclude/reset/toggle-all), only CSS state is patched and no element is recreated.
+- **Reset now actually clears exclusions, including inside already-expanded folders.** Two causes: the webview's state cache was shadowing fresh data from the backend, and the backend only resends the top level on refresh, so deep expanded nodes kept stale flags. The tree is now authoritative, and after every refresh the webview pulls fresh state for every visible node and patches it — so nothing stays frozen and there is no need to restart VS Code.
+- **Loaded subtrees no longer get dropped on refresh.** The routine that grafts previously-loaded children back onto a refreshed tree was reading the already-overwritten tree; it now reads the previous one.
+- **Extension no longer hangs while loading large repositories.** Discovery of nested `.gitignore` files walked the entire tree at activation. It now reads the root ignore file first and prunes any directory that is already ignored (a big `.venv`, `vendor/`, `build/`, `target/`, etc. is skipped instead of descended), with hard caps on directory count and depth as a backstop.
+- **`.gitignore` handling rewritten on top of the `ignore` npm package** (proper gitignore semantics).
+  - Negation (`!pattern`), directory-only (`foo/`), root-anchored (`/dist`), and globstar (`**/foo`) patterns now work correctly.
+  - Comments and trailing-whitespace edge cases handled.
+  - **Nested `.gitignore` files are now discovered and applied**, with patterns re-based relative to their containing directory just like git itself does.
+  - Auto-exclude patterns from settings are merged into the same engine so behaviour is consistent.
+- File-stat cache was being flushed on every refresh, defeating its purpose — it is now keyed by `(path, mtime, size)` and survives refreshes, only re-reading files that actually changed on disk.
+
+### Performance
+- **Folder stats are now computed lazily** in the webview (one message per visible folder, batched on idle) instead of eagerly walking every subtree on every render. Opening the panel on a large repo is no longer blocking.
+- **Selection stats no longer re-walk the workspace** on every status-bar update — they reuse the cached root-folder stats.
+- **Report-size prediction is cached per file by mtime and debounced.** Computing the exact report size requires reading file contents, so results are cached per file (keyed by modification time, size, partial ranges, and the trim setting) and only changed files are re-read. A burst of refreshes (e.g. toggling several files at once) coalesces into a single recompute. After the first pass, repeated status-bar updates re-read zero files.
+- **Exclusion lookups are now O(log N)** via a sorted-prefix array with binary search, replacing the previous O(N·M) scan when many manual includes/partials are present.
+- **Effective-exclusion checks are memoised per refresh pass**, so a single tree render no longer re-walks ancestor chains for every node.
+- **Tree updates are throttled** (80 ms coalescing window) so bursts of file-watcher events produce one refresh, not dozens.
+- **Webview no longer flushes its DOM** on refresh — only changed nodes are patched, and already-expanded subtrees survive backend updates that only resend the top level.
+- **Binary detection no longer reads whole large files** — files over 256 KB are scanned as a buffer for the first non-text byte instead of being loaded as UTF-8 strings.
+- **`.gitignore` re-build is debounced** (200 ms) when the user is editing an ignore file, so each keystroke no longer triggers a full re-scan.
+- Ancestor folder-stats caches are invalidated surgically when a single file changes, instead of clearing the entire cache.
+
 ## [0.4.2] - 2025-08-05
 
 ### Fixed

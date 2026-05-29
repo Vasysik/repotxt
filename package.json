@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.4.7",
+  "version": "0.5.0",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -141,7 +141,6 @@
           "group": "navigation@4"
         }
       ],
-      
       "editor/context": [
         {
           "command": "repotxt.addSelection",
@@ -160,7 +159,10 @@
         "repotxt.interfaceType": {
           "type": "string",
           "default": "webview",
-          "enum": ["treeview", "webview"],
+          "enum": [
+            "treeview",
+            "webview"
+          ],
           "enumDescriptions": [
             "Traditional VS Code tree view interface",
             "Modern web-based interface with advanced selection"
@@ -214,11 +216,43 @@
         "repotxt.binaryFileExtensions": {
           "type": "array",
           "default": [
-            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".ico", ".pdf", ".zip", ".gz", ".rar", ".7z", 
-            ".mp3", ".wav", ".ogg", ".mp4", ".mov", ".avi", ".mkv", 
-            ".exe", ".dll", ".so", ".app", ".dmg", ".vsix",
-            ".woff", ".woff2", ".eot", ".ttf", ".otf", 
-            ".class", ".jar", ".pyc", ".pyo", ".db", ".sqlite", ".sqlite3"
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".tiff",
+            ".ico",
+            ".pdf",
+            ".zip",
+            ".gz",
+            ".rar",
+            ".7z",
+            ".mp3",
+            ".wav",
+            ".ogg",
+            ".mp4",
+            ".mov",
+            ".avi",
+            ".mkv",
+            ".exe",
+            ".dll",
+            ".so",
+            ".app",
+            ".dmg",
+            ".vsix",
+            ".woff",
+            ".woff2",
+            ".eot",
+            ".ttf",
+            ".otf",
+            ".class",
+            ".jar",
+            ".pyc",
+            ".pyo",
+            ".db",
+            ".sqlite",
+            ".sqlite3"
           ],
           "items": {
             "type": "string"
@@ -239,6 +273,11 @@
           "type": "number",
           "default": 10485760,
           "description": "Maximum size of the generated report in characters (default ~10MB). Prevents VS Code from crashing on massive reports."
+        },
+        "repotxt.trimTrailingWhitespace": {
+          "type": "boolean",
+          "default": false,
+          "description": "Remove trailing whitespace from every line of file content in the generated report. Useful if your editor trims whitespace on save (otherwise the report's character count can differ from what you see after saving)."
         },
         "repotxt.aiStyle": {
           "type": "boolean",
@@ -292,14 +331,17 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
+    "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
-    "eslint": "^9.16.0",
-    "typescript": "^5.7.2",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "ignore": "^7.0.5"
   }
 }
