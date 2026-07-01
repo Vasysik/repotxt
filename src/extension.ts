@@ -504,9 +504,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     async function chooseReportFormat() {
         const pick = await vscode.window.showQuickPick([
+            { label: 'Copy', description: 'Copy generated report as text to the clipboard', command: 'copyText' as const },
             { label: 'Text file', description: 'Save repository report as .txt', command: 'text' as const },
             { label: 'ZIP archive', description: 'Save report and included files as .zip', command: 'zip' as const },
-            { label: 'Copy as text', description: 'Copy generated report to the clipboard', command: 'copyText' as const },
         ], { placeHolder: 'Choose report format' });
         if (!pick) return;
         if (pick.command === 'text') await generateTextReport();
