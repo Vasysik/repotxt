@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -482,7 +482,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "sync:icons": "node scripts/sync-material-icons.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -493,6 +494,7 @@
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "eslint": "^9.16.0",
+    "material-icon-theme": "5.36.1",
     "typescript": "^5.7.2"
   },
   "dependencies": {

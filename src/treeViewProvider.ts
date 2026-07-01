@@ -62,30 +62,25 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
         treeItem.resourceUri = vscode.Uri.file(element.fullPath);
         treeItem.contextValue = this.buildContextValue(element.fullPath, isDirectory, hasPartial);
 
-        const descriptions: string[] = [];
-        const tooltipParts: string[] = [];
-
-        // Do not set treeItem.iconPath here. With resourceUri present, VS Code can
-        // use the active file icon theme and show file-type icons by extension.
-        // Statuses are shown as text instead of replacing the file/folder icon.
         if (isCut) {
-            descriptions.push('(cut)');
-            tooltipParts.push('Cut: will be moved on paste');
-        }
-        if (hasPartial && !isDirectory) {
-            descriptions.push('(partial)');
-            tooltipParts.push('Partial content included');
-        }
-        if (isVisuallyExcluded) {
-            descriptions.push('(excluded)');
-            tooltipParts.push('Excluded from report');
+            treeItem.iconPath = new vscode.ThemeIcon('cut');
+            treeItem.description = '(cut)';
+            treeItem.tooltip = 'Cut: will be moved on paste';
+        } else if (hasPartial && !isDirectory) {
+            treeItem.iconPath = new vscode.ThemeIcon('symbol-text');
+            treeItem.description = '(partial)';
+            treeItem.tooltip = 'Partial content included';
+        } else if (isVisuallyExcluded) {
+            treeItem.iconPath = new vscode.ThemeIcon('eye-closed');
+            treeItem.description = '(excluded)';
+            treeItem.tooltip = 'Excluded from report';
+        } else {
+            treeItem.iconPath = isDirectory ? new vscode.ThemeIcon('folder') : new vscode.ThemeIcon('file');
         }
 
-        if (descriptions.length > 0) {
-            treeItem.description = descriptions.join(' ');
-        }
-        if (tooltipParts.length > 0) {
-            treeItem.tooltip = tooltipParts.join(' | ');
+        if (isCut && treeItem.description !== '(cut)') {
+            const description = typeof treeItem.description === 'string' ? treeItem.description : '';
+            treeItem.description = description ? `${description} (cut)` : '(cut)';
         }
 
         if (!isDirectory) {
@@ -106,7 +101,7 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
                 if (cfg.get('showTooltipCharCount', true)) parts.push(`${folderStats.chars.toLocaleString()} chars`);
                 if (parts.length > 0) {
                     parts.push(`${folderStats.files} files`);
-                    treeItem.tooltip = (treeItem.tooltip ? treeItem.tooltip + ' | ' : '') + parts.join(' | ');
+                    treeItem.tooltip = parts.join(' | ');
                 }
             }
         } else {

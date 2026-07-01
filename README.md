@@ -7,6 +7,7 @@ A VS Code extension that helps you analyze and generate comprehensive reports of
 - **Project-Specific Sessions**: Your excluded files are saved per project and restored when you reopen VS Code.
 - **Interactive File Tree**: Browse your repository structure with an interactive tree view, click to open files.
 - **Modern Webview Interface**: Use a fast, modern web-based interface with advanced selection and multi-select support.
+- **Material File Icons in Webview**: File and folder icons in the webview are powered by the Material Icon Theme icon pack and bundled locally with the extension.
 - **Classic Treeview Interface**: Switch to the traditional VS Code tree view if you prefer native look and feel.
 - **Selective Analysis**: Include or exclude specific files and folders from analysis.
 - **Partial File Selection**: Add only specific lines or code fragments from files to your report.
@@ -33,6 +34,26 @@ RepoTxt supports two interface modes:
   - Can be enabled via the `repotxt.interfaceType` setting
 
 You can switch between these modes in the extension settings (`repotxt.interfaceType`).
+
+### Webview File Icons
+
+The webview interface uses a vendored copy of the [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) icon pack for file and folder icons.
+
+The icons are bundled locally under:
+
+```text
+media/material-icons/
+```
+
+This means the webview does not depend on external CDNs, internet access, or a Material Icon Theme extension installed by the user. The icon assets are synced from the npm package during development and then packaged with the extension.
+
+To refresh the bundled icons from the pinned npm package version, run:
+
+```bash
+npm run sync:icons
+```
+
+The sync command copies the required SVG assets from `node_modules/material-icon-theme`, updates `media/icons.js`, and writes source metadata to `media/material-icons/source.json`.
 
 ### File Tree and Exclusion
 The extension provides a tree view of your repository where you can:
@@ -126,6 +147,55 @@ You can modify these settings in VS Code:
 2. Search for "Repository Analyzer"
 3. Adjust settings as needed
 
+## Development and Packaging
+
+Install dependencies:
+
+```bash
+npm ci
+```
+
+If the lockfile is missing or outdated, use:
+
+```bash
+npm install
+```
+
+Sync the webview icon pack:
+
+```bash
+npm run sync:icons
+```
+
+Compile the extension:
+
+```bash
+npm run compile
+```
+
+Package the extension as a `.vsix` file:
+
+```bash
+npx @vscode/vsce package
+```
+
+A typical clean build flow is:
+
+```bash
+npm ci
+npm run sync:icons
+npm run compile
+npx @vscode/vsce package
+```
+
+Then install the generated `.vsix` in VS Code via **Extensions → ... → Install from VSIX...**, or from the command line:
+
+```bash
+code --install-extension repotxt-0.5.0.vsix
+```
+
+When updating the icon pack, change the pinned `material-icon-theme` version in `package.json`, reinstall dependencies, then run `npm run sync:icons` again.
+
 ## Requirements
 
 - Visual Studio Code version 1.90.0 or higher
@@ -138,3 +208,5 @@ Feel free to submit issues and enhancement requests on the GitHub repository.
 ## License
 
 This extension is licensed under the MIT License.
+
+The bundled webview file and folder icons are sourced from [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), which is also licensed under the MIT License. The vendored icon metadata, license, and attribution are stored in `media/material-icons/`.

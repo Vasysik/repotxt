@@ -9,3 +9,5 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+# Build-time helper scripts are not needed in the packaged extension.
+scripts/**

@@ -4,6 +4,26 @@ All notable changes to the "repotxt" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.5.2] - 2026-07-02
+
+### Added
+
+* Added Material Icon Theme support for the webview file tree.
+* Added local vendoring of Material Icon Theme SVG assets under `media/material-icons/`.
+* Added `npm run sync:icons` to sync icon assets from the `material-icon-theme` npm package.
+* Added source metadata, license, and attribution files for the vendored icon pack.
+
+### Changed
+
+* Reworked webview file icons to use real SVG icons from Material Icon Theme instead of custom-generated placeholder-style icons.
+* Improved file and folder icon matching for common extensions, filenames, and folder names.
+* Updated README with icon sync, development, packaging, and attribution instructions.
+
+### Notes
+
+* The webview now ships with local icon assets and does not depend on CDN access, internet access, or the user having Material Icon Theme installed in VS Code.
+* Legacy TreeView behavior was not updated as part of this release.
+
 ## [0.5.0] - 2026-05-27
 
 ### Added

@@ -560,3 +560,13 @@ body {
     color: var(--vscode-badge-foreground);
     background: var(--vscode-badge-background);
 }
+
+/* Material Icon Theme uses <img> assets instead of inline SVG glyphs. */
+.node-icon img.repo-material-icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+}
