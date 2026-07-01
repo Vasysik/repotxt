@@ -16,6 +16,7 @@
         lastSelected: null,
         allOrderedPaths: [],                   // for shift-select range
         domMap: new Map(),                     // path → .node-content element
+        nodeMap: new Map(),                    // path → current node metadata
         excludedCache: new Map(),              // path → bool (last known)
         partialCache: new Map(),               // path → bool
         statsCache: new Map(),                 // path → {type, lines, chars, files}
@@ -33,6 +34,7 @@
         wireToolbar();
         wireSearch();
         wireGlobalKeys();
+        wireBlankContextMenu();
         vscode.postMessage({ type: 'getFileTree' });
     }
 
@@ -111,7 +113,48 @@
                 e.preventDefault();
                 state.selected = new Set(state.allOrderedPaths);
                 applySelectionClasses();
+                return;
             }
+            if (document.activeElement === $('searchInput')) return;
+
+            const selectedPaths = Array.from(state.selected);
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && selectedPaths.length) {
+                e.preventDefault();
+                vscode.postMessage({ type: 'cut', paths: selectedPaths });
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedPaths.length) {
+                e.preventDefault();
+                vscode.postMessage({ type: 'copy', paths: selectedPaths });
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                e.preventDefault();
+                const target = selectedPaths.length === 1 ? selectedPaths[0] : null;
+                vscode.postMessage({ type: 'paste', path: target });
+                return;
+            }
+            if (e.key === 'Delete' && selectedPaths.length) {
+                e.preventDefault();
+                vscode.postMessage({ type: 'delete', paths: selectedPaths });
+                return;
+            }
+            if (e.key === 'F2' && selectedPaths.length === 1) {
+                e.preventDefault();
+                vscode.postMessage({ type: 'rename', path: selectedPaths[0] });
+            }
+        });
+
+        document.addEventListener('click', hideContextMenu);
+        document.addEventListener('scroll', hideContextMenu, true);
+    }
+
+    function wireBlankContextMenu() {
+        const container = $('fileTree');
+        container.addEventListener('contextmenu', (e) => {
+            if (e.target.closest('.node-content')) return;
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, null);
         });
     }
 
@@ -135,14 +178,18 @@
                 if (msg.config) state.config = msg.config;
                 state.firstLoadInProgress = false;
                 // Merge children we'd already loaded so a refresh (which only
-                // resends the top level) doesn't drop expanded subtrees.
+                // resends the top level) doesn't drop expanded subtrees. The
+                // actual node source of truth is path-keyed nodeMap, so refreshed
+                // children replace old entries instead of living forever in a
+                // stale nested array.
                 preserveLoadedChildren(state.tree, prevTree);
+                rebuildNodeMap();
                 if (!state.searchActive) {
                     reconcileTree();
                     // Backend only resends the top level on refresh, so deep
-                    // expanded folders keep stale excluded/partial flags. Pull
-                    // fresh states for every node currently on screen (cheap —
-                    // no file IO on the backend) and patch them in place.
+                    // expanded folders need their own child refresh. This is what
+                    // lets newly-created files appear inside already-open folders.
+                    requestChildrenForExpanded();
                     requestStatesForRendered();
                 }
                 break;
@@ -150,7 +197,9 @@
             case 'children': {
                 const node = findInTree(state.tree, msg.path);
                 if (node) {
-                    node.children = msg.data;
+                    removeKnownChildrenFromMap(node);
+                    node.children = msg.data || [];
+                    indexNodes(node.children);
                     if (!state.searchActive) renderChildren(msg.path);
                 }
                 break;
@@ -196,6 +245,39 @@
         }
     });
 
+    function rebuildNodeMap() {
+        state.nodeMap.clear();
+        indexNodes(state.tree || []);
+    }
+
+    function indexNodes(nodes) {
+        if (!nodes) return;
+        for (const n of nodes) {
+            state.nodeMap.set(n.fullPath, n);
+            if (n.children && n.children.length) indexNodes(n.children);
+        }
+    }
+
+    function removeKnownChildrenFromMap(node) {
+        if (!node || !node.children) return;
+        const walk = (children) => {
+            for (const child of children) {
+                if (child.children) walk(child.children);
+                state.nodeMap.delete(child.fullPath);
+                state.statsCache.delete(child.fullPath);
+            }
+        };
+        walk(node.children);
+    }
+
+    function requestChildrenForExpanded() {
+        state.expanded.forEach((path) => {
+            if (state.nodeMap.has(path)) {
+                vscode.postMessage({ type: 'getChildren', path });
+            }
+        });
+    }
+
     function preserveLoadedChildren(newNodes, prevTree) {
         if (!newNodes || !prevTree) return;
         for (const n of newNodes) {
@@ -212,6 +294,9 @@
     }
 
     function findInTree(nodes, target) {
+        if (!target) return null;
+        const mapped = state.nodeMap.get(target);
+        if (mapped) return mapped;
         if (!nodes) return null;
         for (const n of nodes) {
             if (n.fullPath === target) return n;
@@ -464,6 +549,13 @@
             }
         });
 
+        content.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectForContextMenu(node.fullPath);
+            showContextMenu(e.clientX, e.clientY, node);
+        });
+
         // Lazy folder stats: when a folder element is rendered, defer a request
         // for its stats so the tooltip can show line/char counts. Don't ask if
         // we already have it.
@@ -628,6 +720,83 @@
         }
     }
 
+    // ------------------------------------------------------- context menu ----
+    let contextMenuEl = null;
+
+    function selectForContextMenu(path) {
+        if (!state.selected.has(path)) {
+            state.selected.clear();
+            state.selected.add(path);
+            state.lastSelected = path;
+            applySelectionClasses();
+        }
+    }
+
+    function selectedPathsFor(path) {
+        if (path && state.selected.has(path)) return Array.from(state.selected);
+        return path ? [path] : [];
+    }
+
+    function showContextMenu(x, y, node) {
+        hideContextMenu();
+        const path = node ? node.fullPath : null;
+        const paths = selectedPathsFor(path);
+
+        const menu = document.createElement('div');
+        menu.className = 'context-menu';
+        menu.setAttribute('role', 'menu');
+
+        const addItem = (label, action, options = {}) => {
+            if (options.separator) {
+                const sep = document.createElement('div');
+                sep.className = 'context-menu-separator';
+                menu.appendChild(sep);
+                return;
+            }
+            const item = document.createElement('button');
+            item.className = 'context-menu-item';
+            item.textContent = label;
+            item.disabled = !!options.disabled;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideContextMenu();
+                action();
+            });
+            menu.appendChild(item);
+        };
+
+        addItem('New File', () => vscode.postMessage({ type: 'createFile', path }));
+        addItem('New Folder', () => vscode.postMessage({ type: 'createFolder', path }));
+        addItem('', null, { separator: true });
+        addItem('Generate Text Report', () => vscode.postMessage({ type: 'generateTextReport' }));
+        addItem('Generate ZIP Report', () => vscode.postMessage({ type: 'generateZipReport' }));
+        addItem('', null, { separator: true });
+        addItem('Reveal in File Explorer', () => vscode.postMessage({ type: 'revealInExplorer', path }), { disabled: !path });
+        addItem('Cut', () => vscode.postMessage({ type: 'cut', paths }), { disabled: paths.length === 0 });
+        addItem('Copy', () => vscode.postMessage({ type: 'copy', paths }), { disabled: paths.length === 0 });
+        addItem('Paste', () => vscode.postMessage({ type: 'paste', path }));
+        addItem('Copy Path', () => vscode.postMessage({ type: 'copyPath', paths }), { disabled: paths.length === 0 });
+        addItem('', null, { separator: true });
+        addItem('Rename', () => vscode.postMessage({ type: 'rename', path }), { disabled: !path || paths.length !== 1 });
+        addItem('Delete', () => vscode.postMessage({ type: 'delete', paths }), { disabled: paths.length === 0 });
+
+        document.body.appendChild(menu);
+        contextMenuEl = menu;
+
+        const rect = menu.getBoundingClientRect();
+        const left = Math.min(x, window.innerWidth - rect.width - 4);
+        const top = Math.min(y, window.innerHeight - rect.height - 4);
+        menu.style.left = `${Math.max(4, left)}px`;
+        menu.style.top = `${Math.max(4, top)}px`;
+    }
+
+    function hideContextMenu() {
+        if (contextMenuEl) {
+            contextMenuEl.remove();
+            contextMenuEl = null;
+        }
+    }
+
     // ---------------------------------------------------------- toggling ----
     function toggleNode(node) {
         const content = state.domMap.get(node.fullPath);
@@ -738,6 +907,13 @@
             if (!m.isDirectory && !ctrl) {
                 vscode.postMessage({ type: 'openFile', path: m.fullPath });
             }
+        });
+
+        content.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectForContextMenu(m.fullPath);
+            showContextMenu(e.clientX, e.clientY, { ...m, name: getBasename(m.relPath) });
         });
 
         state.domMap.set(m.fullPath, content);

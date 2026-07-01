@@ -99,6 +99,61 @@
         "command": "repotxt.focusView",
         "title": "Focus Repository Analyzer View",
         "category": "Repo Analyzer"
+      },
+      {
+        "command": "repotxt.generateTextReport",
+        "title": "Generate Text Report",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "repotxt.generateZipReport",
+        "title": "Generate ZIP Report",
+        "icon": "$(file-zip)"
+      },
+      {
+        "command": "repotxt.createFile",
+        "title": "New File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "repotxt.createFolder",
+        "title": "New Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "repotxt.revealInExplorer",
+        "title": "Reveal in File Explorer",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "repotxt.cut",
+        "title": "Cut",
+        "icon": "$(cut)"
+      },
+      {
+        "command": "repotxt.copy",
+        "title": "Copy",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "repotxt.paste",
+        "title": "Paste",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "repotxt.copyPath",
+        "title": "Copy Path",
+        "icon": "$(link)"
+      },
+      {
+        "command": "repotxt.rename",
+        "title": "Rename",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "repotxt.delete",
+        "title": "Delete",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -110,35 +165,95 @@
         },
         {
           "command": "repotxt.clearSelections",
-          "when": "view == repotxt && viewItem == partial",
+          "when": "view == repotxt && viewItem =~ /partial/",
           "group": "inline@2"
+        },
+        {
+          "command": "repotxt.createFile",
+          "when": "view == repotxt",
+          "group": "repotxt.new@1"
+        },
+        {
+          "command": "repotxt.createFolder",
+          "when": "view == repotxt",
+          "group": "repotxt.new@2"
+        },
+        {
+          "command": "repotxt.generateTextReport",
+          "when": "view == repotxt",
+          "group": "repotxt.report@1"
+        },
+        {
+          "command": "repotxt.generateZipReport",
+          "when": "view == repotxt",
+          "group": "repotxt.report@2"
+        },
+        {
+          "command": "repotxt.revealInExplorer",
+          "when": "view == repotxt",
+          "group": "repotxt.navigation@1"
+        },
+        {
+          "command": "repotxt.cut",
+          "when": "view == repotxt",
+          "group": "repotxt.clipboard@1"
+        },
+        {
+          "command": "repotxt.copy",
+          "when": "view == repotxt",
+          "group": "repotxt.clipboard@2"
+        },
+        {
+          "command": "repotxt.paste",
+          "when": "view == repotxt",
+          "group": "repotxt.clipboard@3"
+        },
+        {
+          "command": "repotxt.copyPath",
+          "when": "view == repotxt",
+          "group": "repotxt.clipboard@4"
+        },
+        {
+          "command": "repotxt.rename",
+          "when": "view == repotxt",
+          "group": "repotxt.edit@1"
+        },
+        {
+          "command": "repotxt.delete",
+          "when": "view == repotxt",
+          "group": "repotxt.edit@2"
         }
       ],
       "view/title": [
-        {
-          "command": "repotxt.refresh",
-          "when": "view == repotxt",
-          "group": "navigation@1"
-        },
-        {
-          "command": "repotxt.generateReport",
-          "when": "view == repotxt",
-          "group": "navigation@2"
-        },
-        {
-          "command": "repotxt.resetExclusions",
-          "when": "view == repotxt",
-          "group": "navigation@3"
-        },
         {
           "command": "repotxt.toggleAll",
           "when": "view == repotxt",
           "group": "navigation@0"
         },
         {
-          "command": "repotxt.openSettings",
+          "command": "repotxt.refresh",
+          "when": "view == repotxt",
+          "group": "navigation@1"
+        },
+        {
+          "command": "repotxt.generateTextReport",
+          "when": "view == repotxt",
+          "group": "navigation@2"
+        },
+        {
+          "command": "repotxt.generateZipReport",
+          "when": "view == repotxt",
+          "group": "navigation@3"
+        },
+        {
+          "command": "repotxt.resetExclusions",
           "when": "view == repotxt",
           "group": "navigation@4"
+        },
+        {
+          "command": "repotxt.openSettings",
+          "when": "view == repotxt",
+          "group": "navigation@5"
         }
       ],
       "editor/context": [

@@ -135,6 +135,39 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                 case 'generateReport':
                     vscode.commands.executeCommand('repotxt.generateReport');
                     break;
+                case 'generateTextReport':
+                    vscode.commands.executeCommand('repotxt.generateTextReport');
+                    break;
+                case 'generateZipReport':
+                    vscode.commands.executeCommand('repotxt.generateZipReport');
+                    break;
+                case 'createFile':
+                    vscode.commands.executeCommand('repotxt.createFile', data.path);
+                    break;
+                case 'createFolder':
+                    vscode.commands.executeCommand('repotxt.createFolder', data.path);
+                    break;
+                case 'revealInExplorer':
+                    vscode.commands.executeCommand('repotxt.revealInExplorer', data.path);
+                    break;
+                case 'cut':
+                    vscode.commands.executeCommand('repotxt.cut', data.paths);
+                    break;
+                case 'copy':
+                    vscode.commands.executeCommand('repotxt.copy', data.paths);
+                    break;
+                case 'paste':
+                    vscode.commands.executeCommand('repotxt.paste', data.path);
+                    break;
+                case 'copyPath':
+                    vscode.commands.executeCommand('repotxt.copyPath', data.paths);
+                    break;
+                case 'rename':
+                    vscode.commands.executeCommand('repotxt.rename', data.path);
+                    break;
+                case 'delete':
+                    vscode.commands.executeCommand('repotxt.delete', data.paths);
+                    break;
                 case 'refresh':
                     vscode.commands.executeCommand('repotxt.refresh');
                     break;
