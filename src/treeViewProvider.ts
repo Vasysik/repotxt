@@ -13,6 +13,7 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FileTreeItem | undefined | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
     private treeView: vscode.TreeView<FileTreeItem> | undefined;
+    private cutPaths = new Set<string>();
 
     /**
      * Path-keyed cache for tree items.
@@ -42,11 +43,17 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
         this._onDidChangeTreeData.fire(item);
     }
 
+    setCutPaths(paths: string[]): void {
+        this.cutPaths = new Set(paths);
+        this.refresh();
+    }
+
     getTreeItem(element: FileTreeItem): vscode.TreeItem {
         const isDirectory = this.pathIsDirectory(element.fullPath, element.isDirectory);
         element.isDirectory = isDirectory;
         const isVisuallyExcluded = this.core.isPathVisuallyExcluded(element.fullPath);
         const hasPartial = this.core.hasPartialIncludes(element.fullPath);
+        const isCut = this.cutPaths.has(element.fullPath);
         const collapsibleState = isDirectory
             ? vscode.TreeItemCollapsibleState.Collapsed
             : vscode.TreeItemCollapsibleState.None;
@@ -55,7 +62,11 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
         treeItem.resourceUri = vscode.Uri.file(element.fullPath);
         treeItem.contextValue = this.buildContextValue(element.fullPath, isDirectory, hasPartial);
 
-        if (hasPartial && !isDirectory) {
+        if (isCut) {
+            treeItem.iconPath = new vscode.ThemeIcon('cut');
+            treeItem.description = '(cut)';
+            treeItem.tooltip = 'Cut: will be moved on paste';
+        } else if (hasPartial && !isDirectory) {
             treeItem.iconPath = new vscode.ThemeIcon('symbol-text');
             treeItem.description = '(partial)';
             treeItem.tooltip = 'Partial content included';
@@ -65,6 +76,11 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
             treeItem.tooltip = 'Excluded from report';
         } else {
             treeItem.iconPath = isDirectory ? new vscode.ThemeIcon('folder') : new vscode.ThemeIcon('file');
+        }
+
+        if (isCut && treeItem.description !== '(cut)') {
+            const description = typeof treeItem.description === 'string' ? treeItem.description : '';
+            treeItem.description = description ? `${description} (cut)` : '(cut)';
         }
 
         if (!isDirectory) {
@@ -98,6 +114,13 @@ export class TreeViewProvider implements vscode.TreeDataProvider<FileTreeItem> {
             if (parts.length > 0) {
                 treeItem.tooltip = (treeItem.tooltip ? treeItem.tooltip + ' | ' : '') + parts.join(' | ');
             }
+        }
+
+        if (isCut) {
+            const tooltip = typeof treeItem.tooltip === 'string' ? treeItem.tooltip : '';
+            const cutTooltip = 'Cut: will be moved on paste';
+            treeItem.tooltip = tooltip && !tooltip.includes(cutTooltip) ? `${tooltip} | ${cutTooltip}` : (tooltip || cutTooltip);
+            treeItem.contextValue = `${treeItem.contextValue ?? ''} cut`.trim();
         }
 
         return treeItem;

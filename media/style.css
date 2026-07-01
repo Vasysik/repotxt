@@ -538,3 +538,25 @@ body {
     margin: 4px 0;
     background: var(--vscode-menu-separatorBackground, var(--border));
 }
+
+.node-cut .node-content {
+    opacity: 0.55;
+}
+
+.node-cut .node-name {
+    font-style: italic;
+}
+
+.cut-badge {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    padding: 0 5px;
+    height: 16px;
+    line-height: 16px;
+    border-radius: 999px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--vscode-badge-foreground);
+    background: var(--vscode-badge-background);
+}

@@ -3,9 +3,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RepoAnalyzerCore } from './repoAnalyzerCore';
 
+type FileManagerClipboardState = { mode: 'copy' | 'cut'; paths: string[] } | undefined;
+
 export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'repotxt.webview';
     private _view?: vscode.WebviewView;
+    private _clipboardState: FileManagerClipboardState = undefined;
 
     // Throttle for full-tree refresh broadcasts — coalesces bursts of file events.
     private pendingTreeUpdate: NodeJS.Timeout | undefined;
@@ -45,6 +48,16 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         this.pendingTreeUpdate = setTimeout(() => this.updateWebview(), 80);
     }
 
+    public setFileClipboardState(clipboard: FileManagerClipboardState): void {
+        this._clipboardState = clipboard;
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: 'clipboardState',
+            mode: clipboard?.mode ?? null,
+            paths: clipboard?.paths ?? [],
+        });
+    }
+
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
         _context: vscode.WebviewViewResolveContext,
@@ -58,6 +71,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
         this.updateWebview();
+        this.setFileClipboardState(this._clipboardState);
 
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
@@ -140,6 +154,9 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'generateZipReport':
                     vscode.commands.executeCommand('repotxt.generateZipReport');
+                    break;
+                case 'copyTextReport':
+                    vscode.commands.executeCommand('repotxt.copyTextReport');
                     break;
                 case 'createFile':
                     vscode.commands.executeCommand('repotxt.createFile', data.path);

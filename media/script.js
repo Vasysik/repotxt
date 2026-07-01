@@ -25,6 +25,7 @@
         searchActive: false,
         searchMatches: [],
         searchQuery: '',
+        clipboard: { mode: null, paths: new Set() },
     };
 
     const $ = (id) => document.getElementById(id);
@@ -216,6 +217,12 @@
                         node.partial = s.partial;
                     }
                 }
+                break;
+            }
+            case 'clipboardState': {
+                state.clipboard.mode = msg.mode || null;
+                state.clipboard.paths = new Set(msg.paths || []);
+                applyClipboardClasses();
                 break;
             }
             case 'statsUpdate': {
@@ -435,11 +442,12 @@
         // so read straight from the node and keep the caches in sync.
         const isExcluded = !!node.excluded;
         const isPartial = !!node.partial;
+        const isCut = isCutPath(node.fullPath);
         state.excludedCache.set(node.fullPath, isExcluded);
         state.partialCache.set(node.fullPath, isPartial);
 
         const root = document.createElement('div');
-        root.className = 'tree-node' + (isExcluded ? ' node-excluded' : '');
+        root.className = 'tree-node' + (isExcluded ? ' node-excluded' : '') + (isCut ? ' node-cut' : '');
         root.dataset.path = node.fullPath;
 
         const content = document.createElement('div');
@@ -478,6 +486,10 @@
         name.className = 'node-name';
         name.textContent = node.name;
         content.appendChild(name);
+
+        if (isCut) {
+            content.appendChild(createCutBadge());
+        }
 
         // partial badge (positioned via CSS — sits under hover actions)
         if (isPartial) {
@@ -612,6 +624,36 @@
             }
         };
         (window.requestIdleCallback || setTimeout)(run, 30);
+    }
+
+    function isCutPath(path) {
+        return state.clipboard.mode === 'cut' && state.clipboard.paths.has(path);
+    }
+
+    function createCutBadge() {
+        const badge = document.createElement('span');
+        badge.className = 'cut-badge';
+        badge.textContent = 'Cut';
+        badge.title = 'Cut: will be moved on paste';
+        return badge;
+    }
+
+    function applyClipboardClasses() {
+        state.domMap.forEach((content, path) => {
+            const treeNode = content.parentElement;
+            const isCut = isCutPath(path);
+            treeNode.classList.toggle('node-cut', isCut);
+            let badge = content.querySelector(':scope > .cut-badge');
+            if (isCut && !badge) {
+                const name = content.querySelector('.node-name, .search-name-wrap');
+                const cutBadge = createCutBadge();
+                if (name && name.nextSibling) content.insertBefore(cutBadge, name.nextSibling);
+                else if (name) content.insertBefore(cutBadge, name.nextSibling);
+                else content.appendChild(cutBadge);
+            } else if (!isCut && badge) {
+                badge.remove();
+            }
+        });
     }
 
     // --------------------------------------------------- visual updates ----
@@ -770,6 +812,7 @@
         addItem('', null, { separator: true });
         addItem('Generate Text Report', () => vscode.postMessage({ type: 'generateTextReport' }));
         addItem('Generate ZIP Report', () => vscode.postMessage({ type: 'generateZipReport' }));
+        addItem('Copy Report as Text', () => vscode.postMessage({ type: 'copyTextReport' }));
         addItem('', null, { separator: true });
         addItem('Reveal in File Explorer', () => vscode.postMessage({ type: 'revealInExplorer', path }), { disabled: !path });
         addItem('Cut', () => vscode.postMessage({ type: 'cut', paths }), { disabled: paths.length === 0 });
@@ -861,7 +904,8 @@
 
     function createSearchResultNode(m) {
         const root = document.createElement('div');
-        root.className = 'tree-node search-result' + (m.excluded ? ' node-excluded' : '');
+        const isCut = isCutPath(m.fullPath);
+        root.className = 'tree-node search-result' + (m.excluded ? ' node-excluded' : '') + (isCut ? ' node-cut' : '');
         root.dataset.path = m.fullPath;
 
         const content = document.createElement('div');
@@ -888,6 +932,9 @@
         nameWrap.appendChild(name);
         nameWrap.appendChild(sub);
         content.appendChild(nameWrap);
+        if (isCut) {
+            content.appendChild(createCutBadge());
+        }
 
         const actions = document.createElement('div');
         actions.className = 'node-actions';

@@ -12,7 +12,31 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onView:repotxt",
+    "onView:repotxt.webview",
+    "onCommand:repotxt.toggleExclude",
+    "onCommand:repotxt.toggleExcludeMultiple",
+    "onCommand:repotxt.toggleAll",
+    "onCommand:repotxt.generateReport",
+    "onCommand:repotxt.refresh",
+    "onCommand:repotxt.resetExclusions",
+    "onCommand:repotxt.openSettings",
+    "onCommand:repotxt.addSelection",
+    "onCommand:repotxt.clearSelections",
+    "onCommand:repotxt.clearAllSelections",
+    "onCommand:repotxt.focusView",
+    "onCommand:repotxt.generateTextReport",
+    "onCommand:repotxt.generateZipReport",
+    "onCommand:repotxt.copyTextReport",
+    "onCommand:repotxt.createFile",
+    "onCommand:repotxt.createFolder",
+    "onCommand:repotxt.revealInExplorer",
+    "onCommand:repotxt.cut",
+    "onCommand:repotxt.copy",
+    "onCommand:repotxt.paste",
+    "onCommand:repotxt.copyPath",
+    "onCommand:repotxt.rename",
+    "onCommand:repotxt.delete"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -32,7 +56,7 @@
           "name": "treeView",
           "icon": "$(output-view-icon)",
           "contextualTitle": "treeView",
-          "when": "repotxt.interfaceType == 'treeview'"
+          "when": "config.repotxt.interfaceType == 'treeview'"
         },
         {
           "type": "webview",
@@ -40,7 +64,7 @@
           "name": "webView",
           "icon": "$(output-view-icon)",
           "contextualTitle": "webView",
-          "when": "repotxt.interfaceType == 'webview'"
+          "when": "config.repotxt.interfaceType == 'webview'"
         }
       ]
     },
@@ -109,6 +133,11 @@
         "command": "repotxt.generateZipReport",
         "title": "Generate ZIP Report",
         "icon": "$(file-zip)"
+      },
+      {
+        "command": "repotxt.copyTextReport",
+        "title": "Copy Report as Text",
+        "icon": "$(copy)"
       },
       {
         "command": "repotxt.createFile",
@@ -189,6 +218,11 @@
           "group": "repotxt.report@2"
         },
         {
+          "command": "repotxt.copyTextReport",
+          "when": "view == repotxt",
+          "group": "repotxt.report@3"
+        },
+        {
           "command": "repotxt.revealInExplorer",
           "when": "view == repotxt",
           "group": "repotxt.navigation@1"
@@ -246,14 +280,19 @@
           "group": "navigation@3"
         },
         {
-          "command": "repotxt.resetExclusions",
+          "command": "repotxt.copyTextReport",
           "when": "view == repotxt",
           "group": "navigation@4"
         },
         {
-          "command": "repotxt.openSettings",
+          "command": "repotxt.resetExclusions",
           "when": "view == repotxt",
           "group": "navigation@5"
+        },
+        {
+          "command": "repotxt.openSettings",
+          "when": "view == repotxt",
+          "group": "navigation@6"
         }
       ],
       "editor/context": [

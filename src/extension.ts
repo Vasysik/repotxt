@@ -14,7 +14,8 @@ let charSbItem: vscode.StatusBarItem;
 let filesSbItem: vscode.StatusBarItem;
 
 type ClipboardMode = 'copy' | 'cut';
-let fileManagerClipboard: { mode: ClipboardMode; paths: string[] } | undefined;
+interface FileManagerClipboardState { mode: ClipboardMode; paths: string[] }
+let fileManagerClipboard: FileManagerClipboardState | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
     const core = new RepoAnalyzerCore(context);
@@ -86,6 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
     const interfaceType = config.get<string>('interfaceType', 'treeview');
 
     vscode.commands.executeCommand('setContext', 'repotxt.interfaceType', interfaceType);
+    vscode.commands.executeCommand('setContext', 'repotxt.hasFileClipboard', false);
 
     if (interfaceType === 'treeview') {
         treeViewProvider = new TreeViewProvider(core);
@@ -235,6 +237,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }
 
+    function updateFileClipboardVisuals() {
+        const cutPaths = fileManagerClipboard?.mode === 'cut' ? fileManagerClipboard.paths : [];
+        treeViewProvider?.setCutPaths(cutPaths);
+        webviewProvider?.setFileClipboardState(fileManagerClipboard);
+        vscode.commands.executeCommand('setContext', 'repotxt.hasFileClipboard', !!fileManagerClipboard);
+    }
+
     async function getAvailableDestination(baseDestination: string): Promise<string> {
         if (!(await pathExists(baseDestination))) return baseDestination;
 
@@ -326,6 +335,7 @@ export function activate(context: vscode.ExtensionContext) {
         const paths = getPathsFromArg(arg);
         if (paths.length === 0) return;
         fileManagerClipboard = { mode, paths };
+        updateFileClipboardVisuals();
         vscode.window.showInformationMessage(`${mode === 'cut' ? 'Cut' : 'Copied'} ${paths.length} item(s)`);
     }
 
@@ -355,7 +365,10 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }
 
-        if (fileManagerClipboard.mode === 'cut') fileManagerClipboard = undefined;
+        if (fileManagerClipboard.mode === 'cut') {
+            fileManagerClipboard = undefined;
+            updateFileClipboardVisuals();
+        }
         await refreshAfterFileOperation();
         vscode.window.showInformationMessage('Paste complete');
     }
@@ -474,14 +487,31 @@ export function activate(context: vscode.ExtensionContext) {
         if (action === 'Reveal in Explorer') await vscode.commands.executeCommand('revealFileInOS', targetUri);
     }
 
+    async function copyTextReportToClipboard() {
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Generating repository report for clipboard...',
+            cancellable: false
+        }, async progress => {
+            progress.report({ increment: 0 });
+            const report = await core.generateReport();
+            await vscode.env.clipboard.writeText(report);
+            progress.report({ increment: 100 });
+        });
+
+        vscode.window.showInformationMessage('Repository report copied as text');
+    }
+
     async function chooseReportFormat() {
         const pick = await vscode.window.showQuickPick([
             { label: 'Text file', description: 'Save repository report as .txt', command: 'text' as const },
             { label: 'ZIP archive', description: 'Save report and included files as .zip', command: 'zip' as const },
+            { label: 'Copy as text', description: 'Copy generated report to the clipboard', command: 'copyText' as const },
         ], { placeHolder: 'Choose report format' });
         if (!pick) return;
         if (pick.command === 'text') await generateTextReport();
-        else await generateZipReport();
+        else if (pick.command === 'zip') await generateZipReport();
+        else await copyTextReportToClipboard();
     }
 
     context.subscriptions.push(
@@ -509,6 +539,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('repotxt.generateReport', () => runSafely('Generate report', chooseReportFormat)),
         vscode.commands.registerCommand('repotxt.generateTextReport', () => runSafely('Generate text report', generateTextReport)),
         vscode.commands.registerCommand('repotxt.generateZipReport', () => runSafely('Generate ZIP report', generateZipReport)),
+        vscode.commands.registerCommand('repotxt.copyTextReport', () => runSafely('Copy report as text', copyTextReportToClipboard)),
         vscode.commands.registerCommand('repotxt.createFile', (arg?: any) => runSafely('Create file', () => createFile(arg))),
         vscode.commands.registerCommand('repotxt.createFolder', (arg?: any) => runSafely('Create folder', () => createFolder(arg))),
         vscode.commands.registerCommand('repotxt.revealInExplorer', (arg?: any) => runSafely('Reveal in Explorer', () => revealInExplorer(arg))),
