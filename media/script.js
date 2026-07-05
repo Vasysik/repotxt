@@ -227,6 +227,7 @@
             }
             case 'statsUpdate': {
                 for (const { path, stats } of msg.list) {
+                    pendingFolderStats.delete(path);
                     state.statsCache.set(path, stats);
                     applyTooltip(path, stats);
                 }
@@ -568,11 +569,21 @@
             showContextMenu(e.clientX, e.clientY, node);
         });
 
-        // Lazy folder stats: when a folder element is rendered, defer a request
-        // for its stats so the tooltip can show line/char counts. Don't ask if
-        // we already have it.
-        if (node.isDirectory && !state.statsCache.has(node.fullPath)) {
-            requestIdleStats(node.fullPath);
+        // Folder stats can require a recursive walk of a large subtree. Request
+        // them only after the user actually hovers the folder, instead of
+        // automatically scanning every visible root folder while the view loads.
+        if (node.isDirectory) {
+            let hoverStatsTimer = null;
+            content.addEventListener('mouseenter', () => {
+                if (state.statsCache.has(node.fullPath) || pendingFolderStats.has(node.fullPath)) return;
+                hoverStatsTimer = setTimeout(() => requestFolderStats(node.fullPath), 350);
+            });
+            content.addEventListener('mouseleave', () => {
+                if (hoverStatsTimer !== null) {
+                    clearTimeout(hoverStatsTimer);
+                    hoverStatsTimer = null;
+                }
+            });
         }
 
         state.domMap.set(node.fullPath, content);
@@ -605,25 +616,11 @@
         return el;
     }
 
-    // Idle queue for folder-stats requests so we don't fire dozens at once.
-    const idleStatsQueue = [];
-    let idleStatsRunning = false;
-    function requestIdleStats(p) {
-        idleStatsQueue.push(p);
-        if (idleStatsRunning) return;
-        idleStatsRunning = true;
-        const run = () => {
-            const batch = idleStatsQueue.splice(0, 12);
-            for (const path of batch) {
-                vscode.postMessage({ type: 'getFolderStats', path });
-            }
-            if (idleStatsQueue.length) {
-                (window.requestIdleCallback || setTimeout)(run, 30);
-            } else {
-                idleStatsRunning = false;
-            }
-        };
-        (window.requestIdleCallback || setTimeout)(run, 30);
+    const pendingFolderStats = new Set();
+    function requestFolderStats(p) {
+        if (state.statsCache.has(p) || pendingFolderStats.has(p)) return;
+        pendingFolderStats.add(p);
+        vscode.postMessage({ type: 'getFolderStats', path: p });
     }
 
     function isCutPath(path) {

@@ -536,6 +536,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('repotxt.openSettings', () => {
             vscode.commands.executeCommand('workbench.action.openSettings', '@ext:TUBIK-corp.repotxt');
         }),
+        vscode.commands.registerCommand('repotxt.showLogs', () => {
+            core.showLogs();
+        }),
         vscode.commands.registerCommand('repotxt.generateReport', () => runSafely('Generate report', chooseReportFormat)),
         vscode.commands.registerCommand('repotxt.generateTextReport', () => runSafely('Generate text report', generateTextReport)),
         vscode.commands.registerCommand('repotxt.generateZipReport', () => runSafely('Generate ZIP report', generateZipReport)),

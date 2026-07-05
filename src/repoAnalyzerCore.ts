@@ -83,30 +83,84 @@ export class RepoAnalyzerCore {
     private refreshTimeout: NodeJS.Timeout | undefined;
     private rebuildIgnoreTimeout: NodeJS.Timeout | undefined;
 
+    // Low-volume diagnostics. The channel is always available under
+    // Output -> "RepoTxt" and intentionally logs aggregates instead of every
+    // file-system event so logging cannot become the performance problem.
+    private readonly outputChannel: vscode.OutputChannel;
+    private watcherLogTimeout: NodeJS.Timeout | undefined;
+    private watcherBurst = {
+        create: 0,
+        change: 0,
+        delete: 0,
+        excluded: 0,
+        ignoreFiles: 0,
+        accepted: 0,
+        topPaths: new Map<string, number>(),
+    };
+
+    private selectionStatsComputeRunning = false;
+    private selectionStatsRecomputePending = false;
+    private workspaceReady = false;
+
     constructor(private context: vscode.ExtensionContext) {
-        this.initialize();
-        vscode.workspace.onDidChangeWorkspaceFolders(() => this.initialize());
+        this.outputChannel = vscode.window.createOutputChannel('RepoTxt');
+        this.context.subscriptions.push(this.outputChannel);
+        this.log(`[activate] RepoTxt ${String(this.context.extension.packageJSON.version ?? 'dev')}`);
+
+        void this.initialize().catch(error => this.logError('[init] failed', error));
+        this.context.subscriptions.push(
+            vscode.workspace.onDidChangeWorkspaceFolders(() => {
+                void this.initialize().catch(error => this.logError('[init] workspace change failed', error));
+            })
+        );
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('repotxt')) {
-                this.recalculateAutoExclusions().then(() => this.refresh());
+                void this.recalculateAutoExclusions()
+                    .then(() => this.refresh())
+                    .catch(error => this.logError('[config] recalculation failed', error));
             }
         });
+    }
+
+    public showLogs(): void {
+        this.outputChannel.show(true);
+    }
+
+    public diagnosticLog(message: string): void {
+        this.log(message);
+    }
+
+    private log(message: string): void {
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+    }
+
+    private logError(message: string, error: unknown): void {
+        const detail = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
+        this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}: ${detail}`);
     }
 
     // ---------- Initialization ----------
 
     private async initialize() {
+        const startedAt = Date.now();
+        this.workspaceReady = false;
         const folders = vscode.workspace.workspaceFolders;
         if (folders && folders.length > 0) {
             this.workspaceRoot = folders[0].uri.fsPath;
+            this.log(`[init] workspace=${this.workspaceRoot}`);
             this.loadState();
             this.rebuildIndices();
             await this.recalculateAutoExclusions();
             this.setupFileWatcher();
+            this.workspaceReady = true;
             this.refresh();
+            this.log(`[init] ready in ${Date.now() - startedAt}ms`);
         } else {
             this.workspaceRoot = undefined;
+            this.workspaceReady = false;
             this.fileWatcher?.dispose();
+            this.fileWatcher = undefined;
+            this.log('[init] no workspace folder');
         }
     }
 
@@ -117,6 +171,7 @@ export class RepoAnalyzerCore {
         this.fileWatcher = vscode.workspace.createFileSystemWatcher(
             new vscode.RelativePattern(this.workspaceRoot, '**/*')
         );
+        this.log('[watcher] watching workspace pattern **/*');
 
         const isIgnoreFile = (uri: vscode.Uri) => {
             const names = vscode.workspace.getConfiguration('repotxt')
@@ -126,15 +181,24 @@ export class RepoAnalyzerCore {
 
         const handleEvent = (uri: vscode.Uri, type: 'create' | 'change' | 'delete') => {
             const fsPath = uri.fsPath;
+            this.recordWatcherEvent(fsPath, type);
 
             // Ignore file edits → rebuild ignore rules
             if (isIgnoreFile(uri)) {
+                this.watcherBurst.ignoreFiles++;
                 this.scheduleRebuildIgnore();
                 return;
             }
 
-            // Skip events for files that are excluded anyway (avoid useless rerenders).
-            if (type === 'change' && this.isPathEffectivelyExcluded(fsPath)) return;
+            // Skip ALL events for paths that are excluded anyway. Previously
+            // create/delete events in build/, .git/, dist/, etc. still
+            // invalidated caches and scheduled a full stats recompute.
+            if (this.isPathEffectivelyExcluded(fsPath)) {
+                this.watcherBurst.excluded++;
+                return;
+            }
+
+            this.watcherBurst.accepted++;
 
             // Invalidate stats for this file and any parents.
             this.fileStatsCache.delete(fsPath);
@@ -150,11 +214,59 @@ export class RepoAnalyzerCore {
         this.fileWatcher.onDidChange(uri => handleEvent(uri, 'change'));
     }
 
+    private recordWatcherEvent(fsPath: string, type: 'create' | 'change' | 'delete'): void {
+        this.watcherBurst[type]++;
+
+        if (this.workspaceRoot) {
+            const rel = path.relative(this.workspaceRoot, fsPath);
+            const top = rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+                ? rel.split(path.sep)[0] || '.'
+                : '<outside-workspace>';
+            this.watcherBurst.topPaths.set(top, (this.watcherBurst.topPaths.get(top) ?? 0) + 1);
+        }
+
+        if (!this.watcherLogTimeout) {
+            this.watcherLogTimeout = setTimeout(() => this.flushWatcherBurstLog(), 1000);
+        }
+    }
+
+    private flushWatcherBurstLog(): void {
+        this.watcherLogTimeout = undefined;
+        const burst = this.watcherBurst;
+        const total = burst.create + burst.change + burst.delete;
+        if (total === 0) return;
+
+        const top = Array.from(burst.topPaths.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => `${name}:${count}`)
+            .join(', ');
+
+        const severity = total >= 1000 ? 'storm' : 'burst';
+        this.log(
+            `[watcher:${severity}] total=${total} create=${burst.create} change=${burst.change} ` +
+            `delete=${burst.delete} accepted=${burst.accepted} excluded=${burst.excluded} ` +
+            `ignoreFiles=${burst.ignoreFiles}${top ? ` top=[${top}]` : ''}`
+        );
+
+        burst.create = 0;
+        burst.change = 0;
+        burst.delete = 0;
+        burst.excluded = 0;
+        burst.ignoreFiles = 0;
+        burst.accepted = 0;
+        burst.topPaths.clear();
+    }
+
     private scheduleRebuildIgnore() {
         if (this.rebuildIgnoreTimeout) clearTimeout(this.rebuildIgnoreTimeout);
         this.rebuildIgnoreTimeout = setTimeout(async () => {
-            await this.recalculateAutoExclusions();
-            this.refresh();
+            try {
+                await this.recalculateAutoExclusions();
+                this.refresh();
+            } catch (error) {
+                this.logError('[ignore] rebuild failed', error);
+            }
         }, 200);
     }
 
@@ -201,6 +313,10 @@ export class RepoAnalyzerCore {
 
     private async recalculateAutoExclusions() {
         if (!this.workspaceRoot) return;
+        const startedAt = Date.now();
+        let autoPatternCount = 0;
+        let rootIgnoreCount = 0;
+        let nestedIgnoreCount = 0;
 
         const config = vscode.workspace.getConfiguration('repotxt');
         this.cfg.excludeBinaryFiles = config.get<boolean>('excludeBinaryFiles', true);
@@ -215,6 +331,7 @@ export class RepoAnalyzerCore {
         // Auto patterns
         if (config.get<boolean>('autoExcludeEnabled', true)) {
             const patterns = config.get<string[]>('autoExcludePatterns', []) ?? [];
+            autoPatternCount = patterns.length;
             ig.add(patterns);
         }
 
@@ -232,6 +349,7 @@ export class RepoAnalyzerCore {
                 try {
                     const raw = await fs.promises.readFile(rootFile, 'utf8');
                     ig.add(this.adjustGitignorePatterns(raw, ''));
+                    rootIgnoreCount++;
                 } catch { /* no root ignore file of this name */ }
             }
 
@@ -253,13 +371,19 @@ export class RepoAnalyzerCore {
                     // not to the directory the gitignore lives in.
                     const adjusted = this.adjustGitignorePatterns(raw, rel);
                     ig.add(adjusted);
+                    nestedIgnoreCount++;
                 } catch (e) {
-                    console.error(`[repotxt] Failed to read ignore file ${file}`, e);
+                    this.logError(`[ignore] failed to read ${file}`, e);
                 }
             }
         }
 
         this.autoIgnore = ig;
+        this.effectiveExcludedMemo.clear();
+        this.log(
+            `[ignore] rebuilt in ${Date.now() - startedAt}ms ` +
+            `autoPatterns=${autoPatternCount} rootFiles=${rootIgnoreCount} nestedFiles=${nestedIgnoreCount}`
+        );
     }
 
     /**
@@ -287,10 +411,14 @@ export class RepoAnalyzerCore {
         const MAX_DIRS = 20000; // backstop against pathological trees
         const MAX_DEPTH = 12;
         let visited = 0;
+        let hitDirectoryCap = false;
 
         while (stack.length) {
             const { dir, depth } = stack.pop()!;
-            if (++visited > MAX_DIRS) break;
+            if (++visited > MAX_DIRS) {
+                hitDirectoryCap = true;
+                break;
+            }
 
             let entries: fs.Dirent[];
             try {
@@ -314,6 +442,10 @@ export class RepoAnalyzerCore {
                 }
             }
         }
+        this.log(
+            `[ignore-scan] visitedDirs=${Math.min(visited, MAX_DIRS)} found=${found.length} ` +
+            `maxDepth=${MAX_DEPTH}${hitDirectoryCap ? ' capped=true' : ''}`
+        );
         return found;
     }
 
@@ -773,6 +905,7 @@ export class RepoAnalyzerCore {
             catch { return; }
             for (const entry of entries) {
                 const full = path.join(dir, entry.name);
+                if (entry.isSymbolicLink()) continue;
                 if (entry.isDirectory()) {
                     if (!this.isPathVisuallyExcluded(full)) walk(full);
                 } else {
@@ -795,6 +928,11 @@ export class RepoAnalyzerCore {
 
     public getSelectionStats(): { lines: number; chars: number; files: number } {
         if (!this.workspaceRoot) return { lines: 0, chars: 0, files: 0 };
+        // Activation is asynchronous. Do not start a whole-workspace scan before
+        // .gitignore and auto-exclude rules are ready, otherwise the first pass
+        // can descend into build/, .git/ and generated trees that should have
+        // been pruned.
+        if (!this.workspaceReady) return { lines: 0, chars: 0, files: 0 };
         if (this.selectionStatsCache && this.selectionStatsCache.version === this.cacheVersion) {
             return {
                 lines: this.selectionStatsCache.lines,
@@ -816,13 +954,11 @@ export class RepoAnalyzerCore {
                 files: this.selectionStatsCache.files,
             };
         }
-        // No cache yet — show the raw folder estimate immediately so the status
-        // bar isn't blank on first load. getFolderStats reuses the mtime-keyed
-        // file-stats cache (and populates it for tooltips), and the accurate
-        // report-size number replaces this ~120ms later via the debounced
-        // recompute. The slight initial under-count is invisible in practice.
-        const base = this.getFolderStats(this.workspaceRoot);
-        return { lines: base.lines, chars: base.chars, files: base.files };
+        // Never synchronously walk the entire workspace from a status-bar read.
+        // On a large repository that blocks the shared Extension Host and can
+        // make every extension appear frozen. The async recompute above will
+        // publish the real values when ready.
+        return { lines: 0, chars: 0, files: 0 };
     }
 
     private selectionStatsComputeToken = 0;
@@ -832,25 +968,71 @@ export class RepoAnalyzerCore {
         // Debounce: a burst of refreshes (e.g. toggling several files) should
         // trigger exactly one full recompute, not one per refresh.
         if (this.selectionStatsDebounce) clearTimeout(this.selectionStatsDebounce);
-        this.selectionStatsDebounce = setTimeout(async () => {
-            const versionAtStart = this.cacheVersion;
-            if (token !== this.selectionStatsComputeToken) return;
-            try {
-                const stats = await this.computeReportStats();
-                // Bail if a refresh happened while we were reading.
-                if (token !== this.selectionStatsComputeToken) return;
-                if (versionAtStart !== this.cacheVersion) return;
-                this.selectionStatsCache = { ...stats, version: this.cacheVersion };
-                this._onDidChange.fire();
-            } catch { /* leave previous cache in place */ }
+        this.selectionStatsDebounce = setTimeout(() => {
+            void this.runSelectionStatsRecompute(token);
         }, 120);
     }
 
+    private async runSelectionStatsRecompute(token: number): Promise<void> {
+        if (token !== this.selectionStatsComputeToken) return;
+
+        // Do not allow multiple whole-workspace scans to overlap. During a
+        // watcher storm the old implementation could start a second expensive
+        // recompute while the first one was still running.
+        if (this.selectionStatsComputeRunning) {
+            this.selectionStatsRecomputePending = true;
+            this.log('[stats] recompute already running; queued one follow-up pass');
+            return;
+        }
+
+        this.selectionStatsComputeRunning = true;
+        this.selectionStatsRecomputePending = false;
+        const versionAtStart = this.cacheVersion;
+        const startedAt = Date.now();
+        this.log(`[stats] recompute start version=${versionAtStart}`);
+
+        try {
+            const stats = await this.computeReportStats(() =>
+                token !== this.selectionStatsComputeToken || versionAtStart !== this.cacheVersion
+            );
+
+            if (!stats) {
+                this.log(`[stats] recompute cancelled after ${Date.now() - startedAt}ms`);
+                return;
+            }
+            if (token !== this.selectionStatsComputeToken || versionAtStart !== this.cacheVersion) {
+                this.log(`[stats] recompute discarded after ${Date.now() - startedAt}ms (workspace changed)`);
+                return;
+            }
+
+            this.selectionStatsCache = { ...stats, version: this.cacheVersion };
+            this.log(
+                `[stats] recompute done in ${Date.now() - startedAt}ms ` +
+                `files=${stats.files} lines=${stats.lines} chars=${stats.chars}`
+            );
+            this._onDidChange.fire();
+        } catch (error) {
+            this.logError('[stats] recompute failed', error);
+        } finally {
+            this.selectionStatsComputeRunning = false;
+            if (this.selectionStatsRecomputePending) {
+                this.selectionStatsRecomputePending = false;
+                this.scheduleSelectionStatsRecompute();
+            }
+        }
+    }
+
     public getStatsForPath(p: string): any {
+        const startedAt = Date.now();
         try {
             const st = fs.statSync(p);
             if (st.isDirectory()) {
                 const f = this.getFolderStats(p);
+                const elapsed = Date.now() - startedAt;
+                if (elapsed >= 100) {
+                    const rel = this.workspaceRoot ? path.relative(this.workspaceRoot, p) || '.' : p;
+                    this.log(`[folder-stats] path=${rel} duration=${elapsed}ms files=${f.files}`);
+                }
                 return { type: 'dir', lines: f.lines, chars: f.chars, files: f.files };
             }
         } catch { /* fallthrough */ }
@@ -902,6 +1084,7 @@ export class RepoAnalyzerCore {
 
         for (const entry of sorted) {
             const fullPath = path.join(dirPath, entry.name);
+            if (entry.isSymbolicLink()) continue;
             if (entry.isDirectory()) {
                 const dirExcluded = this.isPathVisuallyExcluded(fullPath);
                 const hasIncludes = this.folderContainsManualIncludes(fullPath);
@@ -939,6 +1122,7 @@ export class RepoAnalyzerCore {
                 return results;
             }
             const fullPath = path.join(dirPath, entry.name);
+            if (entry.isSymbolicLink()) continue;
             if (entry.isDirectory()) {
                 const dirExcluded = this.isPathEffectivelyExcluded(fullPath);
                 const hasIncludes = this.folderContainsManualIncludes(fullPath);
@@ -1121,7 +1305,7 @@ export class RepoAnalyzerCore {
         });
 
         const reportFiles: string[] = [];
-        this.collectReportFiles(this.workspaceRoot, reportFiles);
+        await this.collectReportFiles(this.workspaceRoot, reportFiles);
 
         for (const fullPath of reportFiles) {
             const relPath = path.relative(this.workspaceRoot, fullPath)
@@ -1270,7 +1454,9 @@ export class RepoAnalyzerCore {
      * old approach (summing raw per-file line/char counts) ignored all of that
      * wrapper text and so never matched the real report.
      */
-    private async computeReportStats(): Promise<{ lines: number; chars: number; files: number }> {
+    private async computeReportStats(
+        isCancelled: () => boolean = () => false,
+    ): Promise<{ lines: number; chars: number; files: number } | null> {
         if (!this.workspaceRoot) return { lines: 0, chars: 0, files: 0 };
 
         const config = vscode.workspace.getConfiguration('repotxt');
@@ -1282,24 +1468,39 @@ export class RepoAnalyzerCore {
                 .replace('${workspaceName}', workspaceName) + '\n\n';
         }
         const structureList: string[] = [];
+        const structureStartedAt = Date.now();
         await this.getFlatStructure(this.workspaceRoot, structureList);
+        this.log(`[stats] structure scan ${Date.now() - structureStartedAt}ms entries=${structureList.length}`);
+        if (isCancelled()) return null;
         header += `Folder Structure: ${workspaceName}\n${structureList.join('\n')}\n\n`;
 
         // Collect the per-file blocks exactly as the report does, then account
         // for the `\n` that join(...) inserts between them. Per-file metrics are
         // cached by mtime, so repeated recomputes only re-read changed files.
         const fileList: string[] = [];
-        this.collectReportFiles(this.workspaceRoot, fileList);
+        const collectStartedAt = Date.now();
+        await this.collectReportFiles(this.workspaceRoot, fileList, isCancelled);
+        this.log(`[stats] file collection ${Date.now() - collectStartedAt}ms files=${fileList.length}`);
+        if (isCancelled()) return null;
 
         let chars = header.length;
         let newlines = this.countNewlines(header);
         let files = 0;
-        for (const f of fileList) {
+        const measureStartedAt = Date.now();
+        for (let i = 0; i < fileList.length; i++) {
+            if (isCancelled()) return null;
+            // Even cached files can resolve synchronously. Yield periodically so
+            // timers, UI messages and other extensions can keep running.
+            if (i > 0 && i % 250 === 0) {
+                await new Promise<void>(resolve => setImmediate(resolve));
+            }
+            const f = fileList[i];
             const m = await this.measureFileReportBlock(f);
             chars += m.chars;
             newlines += m.newlines;
             files++;
         }
+        this.log(`[stats] block measurement ${Date.now() - measureStartedAt}ms files=${files}`);
         if (fileList.length > 1) {
             // join('\n') adds (n-1) separators between blocks.
             const seps = fileList.length - 1;
@@ -1311,19 +1512,28 @@ export class RepoAnalyzerCore {
     }
 
     /** Mirror of generateFileContentBlocks' traversal, collecting file paths only. */
-    private collectReportFiles(dirPath: string, out: string[]): void {
+    private async collectReportFiles(
+        dirPath: string,
+        out: string[],
+        isCancelled: () => boolean = () => false,
+    ): Promise<void> {
+        if (isCancelled()) return;
         let entries: fs.Dirent[];
-        try { entries = fs.readdirSync(dirPath, { withFileTypes: true }); }
+        try { entries = await fs.promises.readdir(dirPath, { withFileTypes: true }); }
         catch { return; }
         const sorted = entries.sort((a, b) => a.name.localeCompare(b.name));
         for (const entry of sorted) {
+            if (isCancelled()) return;
             const fullPath = path.join(dirPath, entry.name);
+            // Never traverse or measure symlink targets during background stats.
+            // Flutter and generated build trees often contain symlink farms.
+            if (entry.isSymbolicLink()) continue;
             if (entry.isDirectory()) {
                 const dirExcluded = this.isPathEffectivelyExcluded(fullPath);
                 const hasIncludes = this.folderContainsManualIncludes(fullPath);
                 const hasPartials = this.folderContainsPartialIncludes(fullPath);
                 if (!dirExcluded || hasIncludes || hasPartials) {
-                    this.collectReportFiles(fullPath, out);
+                    await this.collectReportFiles(fullPath, out, isCancelled);
                 }
             } else {
                 if (this.isPathEffectivelyExcluded(fullPath)) continue;

@@ -4,7 +4,7 @@
   "description": "Analyze and generate reports of repository content",
   "repository": "https://github.com/Vasysik/repotxt",
   "publisher": "TUBIK-corp",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -102,6 +102,10 @@
         "command": "repotxt.openSettings",
         "title": "Open Extension Settings",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "repotxt.showLogs",
+        "title": "Show Diagnostic Logs"
       },
       {
         "command": "repotxt.addSelection",

@@ -246,6 +246,7 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
 
     public async updateWebview() {
         if (!this._view) return;
+        const startedAt = Date.now();
         const tree = await this.getWebviewData();
         const config = vscode.workspace.getConfiguration('repotxt');
         this._view.webview.postMessage({
@@ -256,6 +257,9 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
                 showTooltipCharCount: config.get('showTooltipCharCount', true),
             },
         });
+        this._core.diagnosticLog(
+            `[webview] root tree update ${Date.now() - startedAt}ms entries=${tree.length}`
+        );
     }
 
     private async getWebviewData(): Promise<any[]> {
@@ -265,7 +269,15 @@ export class RepoAnalyzerWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private async getWebviewChildren(directoryPath: string): Promise<any[]> {
-        return this.getWebviewFileTree(directoryPath);
+        const startedAt = Date.now();
+        const children = await this.getWebviewFileTree(directoryPath);
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= 100) {
+            const root = this._core.getWorkspaceRoot();
+            const rel = root ? path.relative(root, directoryPath) || '.' : directoryPath;
+            this._core.diagnosticLog(`[webview] children path=${rel} duration=${elapsed}ms entries=${children.length}`);
+        }
+        return children;
     }
 
     /**
